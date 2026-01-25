@@ -64,6 +64,15 @@
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
+
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-5px); }
+            75% { transform: translateX(5px); }
+        }
+        .shake {
+            animation: shake 0.2s ease-in-out 0s 2;
+        }
     </style>
 </head>
 <body class="flex flex-col items-center justify-center p-4">
@@ -189,7 +198,7 @@
         let user = null;
         let userName = "";
 
-        // Initialize Authentication (Anonymous for tracking/saving)
+        // Initialize Authentication
         const startAuth = async () => {
             try {
                 if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
@@ -264,6 +273,7 @@
         let scores = { thrill: 0, chill: 0, fancy: 0, quick: 0, tech: 0, "old-school": 0 };
         let userChoices = [];
 
+        // Expose functions to window for HTML onclick handlers
         window.startGame = () => {
             const input = document.getElementById('user-name');
             if (!input.value.trim()) {
@@ -277,22 +287,6 @@
             document.getElementById('player-greeting').innerText = `Hi ${userName}, let's find your magic!`;
             updateCard();
         };
-
-        function updateCard() {
-            const q = questions[currentQuestion];
-            const card = document.getElementById('question-card');
-            card.classList.remove('fade-in');
-            void card.offsetWidth; 
-            card.classList.add('fade-in');
-
-            document.getElementById('question-text').innerText = "Would You Rather " + q.q;
-            document.getElementById('text-a').innerText = q.a.text;
-            document.getElementById('icon-a').innerText = q.a.icon;
-            document.getElementById('text-b').innerText = q.b.text;
-            document.getElementById('icon-b').innerText = q.b.icon;
-            document.getElementById('counter').innerText = `Dilemma ${currentQuestion + 1} of 10`;
-            document.getElementById('progress-bar').style.width = ((currentQuestion + 1) * 10) + "%";
-        }
 
         window.handleChoice = (choice) => {
             const q = questions[currentQuestion];
@@ -313,6 +307,22 @@
             el.classList.toggle('hidden');
             if (!el.classList.contains('hidden')) loadHistory();
         };
+
+        function updateCard() {
+            const q = questions[currentQuestion];
+            const card = document.getElementById('question-card');
+            card.classList.remove('fade-in');
+            void card.offsetWidth; 
+            card.classList.add('fade-in');
+
+            document.getElementById('question-text').innerText = "Would You Rather " + q.q;
+            document.getElementById('text-a').innerText = q.a.text;
+            document.getElementById('icon-a').innerText = q.a.icon;
+            document.getElementById('text-b').innerText = q.b.text;
+            document.getElementById('icon-b').innerText = q.b.icon;
+            document.getElementById('counter').innerText = `Dilemma ${currentQuestion + 1} of 10`;
+            document.getElementById('progress-bar').style.width = ((currentQuestion + 1) * 10) + "%";
+        }
 
         async function loadHistory() {
             const resultsList = document.getElementById('results-list');
@@ -398,7 +408,6 @@
             if (scores.thrill > scores.chill) { addLi(likesList, "E-Ticket Thrills"); addLi(dislikesList, "Long boat rides"); }
             else { addLi(likesList, "Atmospheric Dark Rides"); addLi(dislikesList, "Intense inversions"); }
 
-            // Save Result (using anonymous user ID)
             if (user) {
                 document.getElementById('save-status').classList.remove('hidden');
                 try {
