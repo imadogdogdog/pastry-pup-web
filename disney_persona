@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Disney Magic: Your Park Persona</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;700&family=Pacifico&display=swap');
+        
+        :root {
+            --disney-blue: #0066cc;
+            --disney-gold: #c5a059;
+        }
+
+        body {
+            font-family: 'Montserrat', sans-serif;
+            background: linear-gradient(135deg, #f0f7ff 0%, #e0eaff 100%);
+            min-height: 100vh;
+        }
+
+        .disney-font {
+            font-family: 'Pacifico', cursive;
+        }
+
+        .card-gradient {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+        }
+
+        .btn-option {
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .btn-option:hover {
+            transform: translateY(-3px) scale(1.02);
+            box-shadow: 0 10px 20px rgba(0, 102, 204, 0.2);
+        }
+
+        .fade-in {
+            animation: fadeIn 0.5s ease-out forwards;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+
+        .loading-spinner {
+            border: 3px solid rgba(0, 102, 204, 0.1);
+            border-radius: 50%;
+            border-top: 3px solid var(--disney-blue);
+            width: 24px;
+            height: 24px;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="flex flex-col items-center justify-center p-4">
+
+    <!-- Auth/Name Entry Screen -->
+    <div id="start-container" class="max-w-md w-full fade-in">
+        <div class="card-gradient rounded-3xl p-8 shadow-2xl border border-white text-center">
+            <h1 class="disney-font text-4xl text-blue-700 mb-2">Welcome Explorer</h1>
+            <p class="text-gray-600 mb-6 text-sm">Discover your Disney Park Persona</p>
+            
+            <div id="auth-ui" class="space-y-3 mb-6">
+                <button id="google-login-btn" onclick="handleSocialLogin('Google')" class="w-full flex items-center justify-center gap-3 bg-white border border-gray-300 py-3 rounded-xl font-semibold text-gray-700 hover:bg-gray-50 transition-all">
+                    <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/action/google.svg" class="w-5" alt="">
+                    Sign in with Google
+                </button>
+                <button id="fb-login-btn" onclick="handleSocialLogin('Facebook')" class="w-full flex items-center justify-center gap-3 bg-[#1877F2] text-white py-3 rounded-xl font-semibold hover:bg-[#166fe5] transition-all">
+                    <i class="fab fa-facebook text-xl"></i>
+                    Sign in with Facebook
+                </button>
+                <div class="flex items-center gap-2 text-gray-400 py-2">
+                    <hr class="flex-grow border-gray-200"> <span>OR</span> <hr class="flex-grow border-gray-200">
+                </div>
+            </div>
+
+            <!-- Logged In State -->
+            <div id="user-info-section" class="hidden mb-6 p-4 bg-blue-50 rounded-2xl border border-blue-100 flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                    <div id="user-avatar" class="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center text-white font-bold shadow-md">?</div>
+                    <div class="text-left">
+                        <p class="text-[10px] text-blue-400 uppercase font-black tracking-widest">Logged In</p>
+                        <p id="logged-in-name" class="font-bold text-blue-800 leading-tight"></p>
+                    </div>
+                </div>
+                <button onclick="logout()" class="text-xs text-red-500 font-bold hover:bg-red-50 px-2 py-1 rounded transition-colors">Log Out</button>
+            </div>
+
+            <div class="text-left mb-1">
+                <label class="text-[10px] font-bold text-gray-400 uppercase ml-2">Display Name</label>
+            </div>
+            <input type="text" id="user-name" placeholder="Enter Your Nickname" class="w-full p-4 rounded-xl border-2 border-blue-100 mb-4 focus:border-blue-500 outline-none transition-all text-center text-lg font-bold shadow-sm">
+            
+            <button onclick="startGame()" class="w-full bg-blue-600 text-white py-4 rounded-xl font-bold hover:bg-blue-700 transition-all shadow-lg mb-4">
+                Start Magic Quiz
+            </button>
+
+            <button onclick="toggleHistory()" class="text-sm text-blue-500 font-semibold hover:underline">
+                <i class="fas fa-users mr-1"></i> See Community Results
+            </button>
+        </div>
+    </div>
+
+    <!-- History Modal -->
+    <div id="history-container" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+        <div class="card-gradient rounded-3xl p-8 shadow-2xl w-full max-w-lg max-h-[80vh] flex flex-col">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="disney-font text-2xl text-blue-700">Recent Explorers</h2>
+                <button onclick="toggleHistory()" class="text-gray-400 hover:text-gray-600"><i class="fas fa-times text-xl"></i></button>
+            </div>
+            
+            <div id="login-notice" class="bg-blue-50 p-4 rounded-xl mb-4 text-xs text-blue-800 border border-blue-100 flex items-center gap-3">
+                <i class="fas fa-shield-alt text-lg"></i>
+                <p>Log in with social accounts to save your results and appear on this leaderboard!</p>
+            </div>
+
+            <div id="results-list" class="flex-grow overflow-y-auto space-y-3 no-scrollbar pr-2">
+                <!-- Results injected here -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Game UI -->
+    <div id="game-container" class="hidden max-w-2xl w-full">
+        <div class="text-center mb-8">
+            <h1 class="disney-font text-4xl text-blue-700 mb-2">Magic Dilemmas</h1>
+            <p id="player-greeting" class="text-gray-600 font-medium"></p>
+        </div>
+
+        <div id="progress-container" class="w-full bg-gray-200 rounded-full h-2.5 mb-8">
+            <div id="progress-bar" class="bg-blue-600 h-2.5 rounded-full transition-all duration-500" style="width: 0%"></div>
+        </div>
+
+        <div id="question-card" class="card-gradient rounded-3xl p-8 shadow-2xl border border-white fade-in">
+            <h2 id="question-text" class="text-2xl font-bold text-center text-gray-800 mb-8">Would You Rather...</h2>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <button onclick="handleChoice('A')" id="option-a" class="btn-option flex flex-col items-center justify-center p-6 bg-white border-2 border-blue-100 rounded-2xl hover:border-blue-500 group">
+                    <div class="text-4xl mb-3 group-hover:scale-110 transition-transform" id="icon-a">🎢</div>
+                    <span id="text-a" class="text-lg font-semibold text-gray-700 text-center">Option A</span>
+                </button>
+
+                <button onclick="handleChoice('B')" id="option-b" class="btn-option flex flex-col items-center justify-center p-6 bg-white border-2 border-blue-100 rounded-2xl hover:border-blue-500 group">
+                    <div class="text-4xl mb-3 group-hover:scale-110 transition-transform" id="icon-b">🎡</div>
+                    <span id="text-b" class="text-lg font-semibold text-gray-700 text-center">Option B</span>
+                </button>
+            </div>
+            
+            <p id="counter" class="text-center text-gray-400 mt-8 text-sm uppercase font-bold tracking-tighter"></p>
+        </div>
+    </div>
+
+    <!-- Result Screen -->
+    <div id="result-container" class="hidden max-w-2xl w-full fade-in pb-10">
+        <div class="card-gradient rounded-3xl p-8 shadow-2xl border border-white text-center">
+            <div id="profile-icon" class="text-6xl mb-4">✨</div>
+            <h2 id="profile-name" class="disney-font text-3xl text-blue-700 mb-2 font-bold">Your Park Persona</h2>
+            <p id="profile-description" class="text-gray-700 leading-relaxed mb-6 font-medium italic"></p>
+            
+            <div id="trait-tags" class="flex flex-wrap justify-center gap-2 mb-6"></div>
+
+            <div class="grid md:grid-cols-2 gap-4 mb-8">
+                <div class="bg-blue-50 rounded-2xl p-6 text-left border border-blue-100">
+                    <h3 class="font-bold text-blue-800 mb-2 text-sm"><i class="fas fa-magic mr-2"></i>What You Love:</h3>
+                    <ul id="likes-list" class="list-disc list-inside text-gray-600 space-y-1 text-xs"></ul>
+                </div>
+
+                <div class="bg-red-50 rounded-2xl p-6 text-left border border-red-100">
+                    <h3 class="font-bold text-red-800 mb-2 text-sm"><i class="fas fa-times-circle mr-2"></i>What You'd Skip:</h3>
+                    <ul id="dislikes-list" class="list-disc list-inside text-gray-600 space-y-1 text-xs"></ul>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-2xl p-6 mb-8 text-left shadow-inner border border-gray-100">
+                <h3 class="font-bold text-gray-800 mb-4 border-b pb-2 text-sm"><i class="fas fa-brain mr-2 text-blue-500"></i>The Math Behind Your Magic:</h3>
+                <div id="analysis-text" class="text-xs text-gray-600 space-y-3"></div>
+            </div>
+
+            <div id="save-status" class="mb-4 hidden">
+                <p class="text-xs font-bold text-green-600"><i class="fas fa-cloud-upload-alt mr-1"></i> Result saved to community history!</p>
+            </div>
+
+            <div class="flex gap-4">
+                <button onclick="location.reload()" class="flex-grow bg-blue-600 text-white px-8 py-3 rounded-full font-bold hover:bg-blue-700 transition-colors shadow-lg">
+                    Retake Quiz
+                </button>
+                <button onclick="toggleHistory()" class="flex-grow bg-white border border-blue-600 text-blue-600 px-8 py-3 rounded-full font-bold hover:bg-blue-50 transition-colors shadow-lg">
+                    Community
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, collection, query, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Firebase Configuration
+        const firebaseConfig = JSON.parse(__firebase_config);
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'disney-park-persona';
+
+        let user = null;
+        let userName = "";
+        let socialAccount = null;
+
+        // Initialize Authentication
+        const startAuth = async () => {
+            try {
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                    await signInWithCustomToken(auth, __initial_auth_token);
+                } else {
+                    await signInAnonymously(auth);
+                }
+            } catch (err) {
+                console.error("Auth init failed:", err);
+            }
+        };
+        startAuth();
+
+        onAuthStateChanged(auth, (u) => {
+            user = u;
+            // Check if user has social data in localStorage (our virtual login persistent across refresh)
+            const savedSocial = localStorage.getItem('disney_virtual_auth');
+            if (savedSocial) {
+                socialAccount = JSON.parse(savedSocial);
+                updateAuthUI();
+            }
+        });
+
+        // Virtual Social Login Logic
+        window.handleSocialLogin = (provider) => {
+            const btn = provider === 'Google' ? document.getElementById('google-login-btn') : document.getElementById('fb-login-btn');
+            const originalContent = btn.innerHTML;
+            btn.innerHTML = `<div class="loading-spinner"></div> Logging into ${provider}...`;
+            btn.disabled = true;
+
+            // Simulate network delay for authenticity
+            setTimeout(() => {
+                socialAccount = {
+                    provider: provider,
+                    name: provider === 'Google' ? 'Magic Explorer' : 'Disney Socialite',
+                    id: 'virtual-' + Math.random().toString(36).substr(2, 9)
+                };
+                localStorage.setItem('disney_virtual_auth', JSON.stringify(socialAccount));
+                updateAuthUI();
+                btn.innerHTML = originalContent;
+                btn.disabled = false;
+            }, 1200);
+        };
+
+        function updateAuthUI() {
+            if (socialAccount) {
+                document.getElementById('auth-ui').classList.add('hidden');
+                document.getElementById('user-info-section').classList.remove('hidden');
+                document.getElementById('login-notice').classList.add('hidden');
+                document.getElementById('logged-in-name').innerText = socialAccount.name;
+                document.getElementById('user-avatar').innerText = socialAccount.provider.charAt(0);
+                document.getElementById('user-name').value = socialAccount.name;
+            }
+        }
+
+        window.logout = () => {
+            localStorage.removeItem('disney_virtual_auth');
+            socialAccount = null;
+            document.getElementById('auth-ui').classList.remove('hidden');
+            document.getElementById('user-info-section').classList.add('hidden');
+            document.getElementById('login-notice').classList.remove('hidden');
+            document.getElementById('user-name').value = '';
+        };
+
+        const questions = [
+            {
+                q: "Ride a high-speed adventure or a gentle classic?",
+                a: { text: "Space Mountain", cat: "thrill", icon: "🚀", reason: "Since you chose Space Mountain, you're a Thrill Seeker!" },
+                b: { text: "it's a small world", cat: "chill", icon: "🌎", reason: "By choosing small world, you prioritize whimsical charm." }
+            },
+            {
+                q: "Style of your park lunch?",
+                a: { text: "Fine Dining", cat: "fancy", icon: "🍷", reason: "Fine Dining choice points to your love for luxury and resort craft." },
+                b: { text: "Quick Service & Snacks", cat: "quick", icon: "🍟", reason: "Quick Service shows you're an efficiency expert on the move." }
+            },
+            {
+                q: "Storytelling preference?",
+                a: { text: "Immersive 3D/VR", cat: "tech", icon: "🕶️", reason: "3D tech interest shows you love modern Imagineering." },
+                b: { text: "Classic Animatronics", cat: "old-school", icon: "🤖", reason: "Classic animatronics highlight your respect for physical craft." }
+            },
+            {
+                q: "Experience a drop or a dark ride?",
+                a: { text: "Tower of Terror", cat: "thrill", icon: "🏨", reason: "Choosing drops confirms your bravery for intensity." },
+                b: { text: "Pirates of the Caribbean", cat: "chill", icon: "🦜", reason: "Pirates shows you prefer rich, detailed storytelling." }
+            },
+            {
+                q: "Morning start style?",
+                a: { text: "Character Breakfast", cat: "fancy", icon: "🥞", reason: "A character breakfast start shows you prioritize memories over speed." },
+                b: { text: "Rope dropping big coasters", cat: "thrill", icon: "🏃", reason: "Rope dropping is the mark of a high-intensity park strategist." }
+            },
+            {
+                q: "Star Wars experience?",
+                a: { text: "Rise of the Resistance", cat: "thrill", icon: "⚔️", reason: "Rise appeals to your desire for grand, high-stakes scale." },
+                b: { text: "Building a Droid", cat: "chill", icon: "🛠️", reason: "Building a droid suggests you find value in tactile souvenirs." }
+            },
+            {
+                q: "Evening finale?",
+                a: { text: "Signature Dinner", cat: "fancy", icon: "🥩", reason: "Signature dining shows you prefer a high-end conclusion." },
+                b: { text: "Corn Dog & Fireworks", cat: "quick", icon: "🎆", reason: "Snacking at fireworks shows you're all about that classic energy." }
+            },
+            {
+                q: "Park transportation?",
+                a: { text: "Walking every mile", cat: "quick", icon: "👟", reason: "Walking everywhere demonstrates high stamina and park mastery." },
+                b: { text: "Monorail or Train", cat: "fancy", icon: "🚝", reason: "Monorail use shows you enjoy the journey as much as the park." }
+            },
+            {
+                q: "Aesthetic preference?",
+                a: { text: "Spooky (Haunted Mansion)", cat: "old-school", icon: "👻", reason: "Spooky choices show you love detailed atmospheric storytelling." },
+                b: { text: "Whimsical (Peter Pan)", cat: "old-school", icon: "🧚", reason: "Whimsical choices show you are driven by pure fantasy." }
+            },
+            {
+                q: "Souvenir style?",
+                a: { text: "Ears or Apparel", cat: "quick", icon: "👕", reason: "Apparel is for active fans who wear their Disney pride." },
+                b: { text: "Custom Art/Collectibles", cat: "fancy", icon: "🖼️", reason: "Art choices suggest you view visits as curated experiences." }
+            }
+        ];
+
+        let currentQuestion = 0;
+        let scores = { thrill: 0, chill: 0, fancy: 0, quick: 0, tech: 0, "old-school": 0 };
+        let userChoices = [];
+
+        window.startGame = () => {
+            const input = document.getElementById('user-name');
+            if (!input.value.trim()) {
+                input.classList.add('border-red-400', 'shake');
+                setTimeout(() => input.classList.remove('shake'), 500);
+                return;
+            }
+            userName = input.value.trim();
+            document.getElementById('start-container').classList.add('hidden');
+            document.getElementById('game-container').classList.remove('hidden');
+            document.getElementById('player-greeting').innerText = `Hi ${userName}, let's find your magic!`;
+            updateCard();
+        };
+
+        function updateCard() {
+            const q = questions[currentQuestion];
+            const card = document.getElementById('question-card');
+            card.classList.remove('fade-in');
+            void card.offsetWidth; 
+            card.classList.add('fade-in');
+
+            document.getElementById('question-text').innerText = "Would You Rather " + q.q;
+            document.getElementById('text-a').innerText = q.a.text;
+            document.getElementById('icon-a').innerText = q.a.icon;
+            document.getElementById('text-b').innerText = q.b.text;
+            document.getElementById('icon-b').innerText = q.b.icon;
+            document.getElementById('counter').innerText = `Dilemma ${currentQuestion + 1} of 10`;
+            document.getElementById('progress-bar').style.width = ((currentQuestion + 1) * 10) + "%";
+        }
+
+        window.handleChoice = (choice) => {
+            const q = questions[currentQuestion];
+            const selected = q[choice.toLowerCase()];
+            scores[selected.cat]++;
+            userChoices.push({ answer: selected.text, reason: selected.reason });
+
+            currentQuestion++;
+            if (currentQuestion < questions.length) {
+                updateCard();
+            } else {
+                showResults();
+            }
+        };
+
+        window.toggleHistory = () => {
+            const el = document.getElementById('history-container');
+            el.classList.toggle('hidden');
+            if (!el.classList.contains('hidden')) loadHistory();
+        };
+
+        async function loadHistory() {
+            const resultsList = document.getElementById('results-list');
+            resultsList.innerHTML = '<div class="flex justify-center p-10"><div class="loading-spinner"></div></div>';
+
+            try {
+                // Rule: Fetch all and sort in memory
+                const q = query(collection(db, 'artifacts', appId, 'public', 'data', 'results'));
+                const querySnapshot = await getDocs(q);
+                const data = querySnapshot.docs.map(doc => doc.data())
+                    .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
+                resultsList.innerHTML = '';
+                if (data.length === 0) {
+                    resultsList.innerHTML = '<p class="text-center py-10 text-gray-400 italic">No explorers yet. Be the first!</p>';
+                } else {
+                    data.forEach(item => {
+                        const div = document.createElement('div');
+                        div.className = "p-4 bg-white border border-gray-100 rounded-2xl flex items-center justify-between shadow-sm fade-in";
+                        div.innerHTML = `
+                            <div class="flex items-center gap-3">
+                                <div class="text-2xl">${item.persona.includes('Hero') ? '🔥' : '🎈'}</div>
+                                <div>
+                                    <p class="font-bold text-gray-800 text-sm">${item.name}</p>
+                                    <p class="text-[10px] text-blue-500 font-bold uppercase tracking-wider">${item.persona}</p>
+                                </div>
+                            </div>
+                            <div class="text-[10px] text-gray-300 font-bold uppercase tracking-tighter">
+                                ${new Date(item.timestamp).toLocaleDateString()}
+                            </div>
+                        `;
+                        resultsList.appendChild(div);
+                    });
+                }
+            } catch (err) {
+                resultsList.innerHTML = '<p class="text-center py-10 text-red-400">Error loading community data.</p>';
+            }
+        }
+
+        async function showResults() {
+            document.getElementById('game-container').classList.add('hidden');
+            document.getElementById('result-container').classList.remove('hidden');
+
+            const traitTags = document.getElementById('trait-tags');
+            const likesList = document.getElementById('likes-list');
+            const dislikesList = document.getElementById('dislikes-list');
+            const analysisDiv = document.getElementById('analysis-text');
+            
+            let personaName = scores.thrill > scores.chill ? "High-Speed Hero" : "Whimsical Wanderer";
+            let personaIcon = scores.thrill > scores.chill ? "🔥" : "🎈";
+            let foodStyle = scores.fancy > scores.quick ? "Connoisseur" : "Snack-Pro";
+
+            const finalPersona = `The ${personaName} & ${foodStyle}`;
+            document.getElementById('profile-name').innerText = finalPersona;
+            document.getElementById('profile-icon').innerText = personaIcon;
+            document.getElementById('profile-description').innerText = 
+                `${userName}, your choices reveal you're ${scores.thrill > scores.chill ? 'all about the adrenaline' : 'here for the pure magic'}. You'd rather ${scores.fancy > scores.quick ? 'relax with a signature meal' : 'grab a snack on the run'} to keep the day moving.`;
+
+            // Clear previous
+            traitTags.innerHTML = '';
+            likesList.innerHTML = '';
+            dislikesList.innerHTML = '';
+            analysisDiv.innerHTML = '';
+
+            // Add Traits
+            const addTrait = (txt, cls) => {
+                const s = document.createElement('span');
+                s.className = `px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${cls}`;
+                s.innerText = txt;
+                traitTags.appendChild(s);
+            };
+
+            if (scores.thrill > scores.chill) addTrait("Thrill Seeker", "bg-red-100 text-red-700");
+            else addTrait("Classic Fan", "bg-blue-100 text-blue-700");
+            
+            if (scores.fancy > scores.quick) addTrait("Fancy Foodie", "bg-purple-100 text-purple-700");
+            else addTrait("Efficiency Expert", "bg-green-100 text-green-700");
+
+            // Build Reasoning
+            userChoices.forEach(item => {
+                const p = document.createElement('p');
+                p.innerHTML = `<span class="font-bold text-blue-600">Because of "${item.answer}":</span> ${item.reason}`;
+                analysisDiv.appendChild(p);
+            });
+
+            // Likes/Dislikes
+            const addLi = (el, txt) => { const li = document.createElement('li'); li.innerText = txt; el.appendChild(li); };
+            if (scores.thrill > scores.chill) { addLi(likesList, "E-Ticket Thrills"); addLi(dislikesList, "Long boat rides"); }
+            else { addLi(likesList, "Atmospheric Dark Rides"); addLi(dislikesList, "Intense inversions"); }
+
+            // Save Result if Virtual Logged In
+            if (socialAccount && user) {
+                document.getElementById('save-status').classList.remove('hidden');
+                try {
+                    await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'results', user.uid), {
+                        name: userName,
+                        persona: finalPersona,
+                        timestamp: new Date().toISOString(),
+                        userId: user.uid,
+                        provider: socialAccount.provider
+                    });
+                } catch (e) { console.error("Firestore error:", e); }
+            }
+        }
+    </script>
+</body>
+</html>
