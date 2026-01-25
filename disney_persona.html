@@ -72,38 +72,12 @@
     <div id="start-container" class="max-w-md w-full fade-in">
         <div class="card-gradient rounded-3xl p-8 shadow-2xl border border-white text-center">
             <h1 class="disney-font text-4xl text-blue-700 mb-2">Welcome Explorer</h1>
-            <p class="text-gray-600 mb-6 text-sm">Discover your Disney Park Persona</p>
+            <p class="text-gray-600 mb-8 text-sm">Discover your Disney Park Persona</p>
             
-            <div id="auth-ui" class="space-y-3 mb-6">
-                <button id="google-login-btn" onclick="handleSocialLogin('Google')" class="w-full flex items-center justify-center gap-3 bg-white border border-gray-300 py-3 rounded-xl font-semibold text-gray-700 hover:bg-gray-50 transition-all">
-                    <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/action/google.svg" class="w-5" alt="">
-                    Sign in with Google
-                </button>
-                <button id="fb-login-btn" onclick="handleSocialLogin('Facebook')" class="w-full flex items-center justify-center gap-3 bg-[#1877F2] text-white py-3 rounded-xl font-semibold hover:bg-[#166fe5] transition-all">
-                    <i class="fab fa-facebook text-xl"></i>
-                    Sign in with Facebook
-                </button>
-                <div class="flex items-center gap-2 text-gray-400 py-2">
-                    <hr class="flex-grow border-gray-200"> <span>OR</span> <hr class="flex-grow border-gray-200">
-                </div>
-            </div>
-
-            <!-- Logged In State -->
-            <div id="user-info-section" class="hidden mb-6 p-4 bg-blue-50 rounded-2xl border border-blue-100 flex items-center justify-between">
-                <div class="flex items-center gap-3">
-                    <div id="user-avatar" class="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center text-white font-bold shadow-md">?</div>
-                    <div class="text-left">
-                        <p class="text-[10px] text-blue-400 uppercase font-black tracking-widest">Logged In</p>
-                        <p id="logged-in-name" class="font-bold text-blue-800 leading-tight"></p>
-                    </div>
-                </div>
-                <button onclick="logout()" class="text-xs text-red-500 font-bold hover:bg-red-50 px-2 py-1 rounded transition-colors">Log Out</button>
-            </div>
-
             <div class="text-left mb-1">
                 <label class="text-[10px] font-bold text-gray-400 uppercase ml-2">Display Name</label>
             </div>
-            <input type="text" id="user-name" placeholder="Enter Your Nickname" class="w-full p-4 rounded-xl border-2 border-blue-100 mb-4 focus:border-blue-500 outline-none transition-all text-center text-lg font-bold shadow-sm">
+            <input type="text" id="user-name" placeholder="Enter Your Nickname" class="w-full p-4 rounded-xl border-2 border-blue-100 mb-6 focus:border-blue-500 outline-none transition-all text-center text-lg font-bold shadow-sm">
             
             <button onclick="startGame()" class="w-full bg-blue-600 text-white py-4 rounded-xl font-bold hover:bg-blue-700 transition-all shadow-lg mb-4">
                 Start Magic Quiz
@@ -123,11 +97,6 @@
                 <button onclick="toggleHistory()" class="text-gray-400 hover:text-gray-600"><i class="fas fa-times text-xl"></i></button>
             </div>
             
-            <div id="login-notice" class="bg-blue-50 p-4 rounded-xl mb-4 text-xs text-blue-800 border border-blue-100 flex items-center gap-3">
-                <i class="fas fa-shield-alt text-lg"></i>
-                <p>Log in with social accounts to save your results and appear on this leaderboard!</p>
-            </div>
-
             <div id="results-list" class="flex-grow overflow-y-auto space-y-3 no-scrollbar pr-2">
                 <!-- Results injected here -->
             </div>
@@ -150,7 +119,7 @@
             
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <button onclick="handleChoice('A')" id="option-a" class="btn-option flex flex-col items-center justify-center p-6 bg-white border-2 border-blue-100 rounded-2xl hover:border-blue-500 group">
-                    <div class="text-4xl mb-3 group-hover:scale-110 transition-transform" id="icon-a">🎢</div>
+                    <div class="text-4xl mb-3 group-hover:scale-110 transition-transform" id="icon-a">🚀</div>
                     <span id="text-a" class="text-lg font-semibold text-gray-700 text-center">Option A</span>
                 </button>
 
@@ -207,7 +176,7 @@
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, doc, setDoc, collection, query, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // Firebase Configuration
@@ -219,9 +188,8 @@
 
         let user = null;
         let userName = "";
-        let socialAccount = null;
 
-        // Initialize Authentication
+        // Initialize Authentication (Anonymous for tracking/saving)
         const startAuth = async () => {
             try {
                 if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
@@ -237,54 +205,7 @@
 
         onAuthStateChanged(auth, (u) => {
             user = u;
-            // Check if user has social data in localStorage (our virtual login persistent across refresh)
-            const savedSocial = localStorage.getItem('disney_virtual_auth');
-            if (savedSocial) {
-                socialAccount = JSON.parse(savedSocial);
-                updateAuthUI();
-            }
         });
-
-        // Virtual Social Login Logic
-        window.handleSocialLogin = (provider) => {
-            const btn = provider === 'Google' ? document.getElementById('google-login-btn') : document.getElementById('fb-login-btn');
-            const originalContent = btn.innerHTML;
-            btn.innerHTML = `<div class="loading-spinner"></div> Logging into ${provider}...`;
-            btn.disabled = true;
-
-            // Simulate network delay for authenticity
-            setTimeout(() => {
-                socialAccount = {
-                    provider: provider,
-                    name: provider === 'Google' ? 'Magic Explorer' : 'Disney Socialite',
-                    id: 'virtual-' + Math.random().toString(36).substr(2, 9)
-                };
-                localStorage.setItem('disney_virtual_auth', JSON.stringify(socialAccount));
-                updateAuthUI();
-                btn.innerHTML = originalContent;
-                btn.disabled = false;
-            }, 1200);
-        };
-
-        function updateAuthUI() {
-            if (socialAccount) {
-                document.getElementById('auth-ui').classList.add('hidden');
-                document.getElementById('user-info-section').classList.remove('hidden');
-                document.getElementById('login-notice').classList.add('hidden');
-                document.getElementById('logged-in-name').innerText = socialAccount.name;
-                document.getElementById('user-avatar').innerText = socialAccount.provider.charAt(0);
-                document.getElementById('user-name').value = socialAccount.name;
-            }
-        }
-
-        window.logout = () => {
-            localStorage.removeItem('disney_virtual_auth');
-            socialAccount = null;
-            document.getElementById('auth-ui').classList.remove('hidden');
-            document.getElementById('user-info-section').classList.add('hidden');
-            document.getElementById('login-notice').classList.remove('hidden');
-            document.getElementById('user-name').value = '';
-        };
 
         const questions = [
             {
@@ -398,7 +319,6 @@
             resultsList.innerHTML = '<div class="flex justify-center p-10"><div class="loading-spinner"></div></div>';
 
             try {
-                // Rule: Fetch all and sort in memory
                 const q = query(collection(db, 'artifacts', appId, 'public', 'data', 'results'));
                 const querySnapshot = await getDocs(q);
                 const data = querySnapshot.docs.map(doc => doc.data())
@@ -450,13 +370,11 @@
             document.getElementById('profile-description').innerText = 
                 `${userName}, your choices reveal you're ${scores.thrill > scores.chill ? 'all about the adrenaline' : 'here for the pure magic'}. You'd rather ${scores.fancy > scores.quick ? 'relax with a signature meal' : 'grab a snack on the run'} to keep the day moving.`;
 
-            // Clear previous
             traitTags.innerHTML = '';
             likesList.innerHTML = '';
             dislikesList.innerHTML = '';
             analysisDiv.innerHTML = '';
 
-            // Add Traits
             const addTrait = (txt, cls) => {
                 const s = document.createElement('span');
                 s.className = `px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${cls}`;
@@ -470,28 +388,25 @@
             if (scores.fancy > scores.quick) addTrait("Fancy Foodie", "bg-purple-100 text-purple-700");
             else addTrait("Efficiency Expert", "bg-green-100 text-green-700");
 
-            // Build Reasoning
             userChoices.forEach(item => {
                 const p = document.createElement('p');
                 p.innerHTML = `<span class="font-bold text-blue-600">Because of "${item.answer}":</span> ${item.reason}`;
                 analysisDiv.appendChild(p);
             });
 
-            // Likes/Dislikes
             const addLi = (el, txt) => { const li = document.createElement('li'); li.innerText = txt; el.appendChild(li); };
             if (scores.thrill > scores.chill) { addLi(likesList, "E-Ticket Thrills"); addLi(dislikesList, "Long boat rides"); }
             else { addLi(likesList, "Atmospheric Dark Rides"); addLi(dislikesList, "Intense inversions"); }
 
-            // Save Result if Virtual Logged In
-            if (socialAccount && user) {
+            // Save Result (using anonymous user ID)
+            if (user) {
                 document.getElementById('save-status').classList.remove('hidden');
                 try {
                     await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'results', user.uid), {
                         name: userName,
                         persona: finalPersona,
                         timestamp: new Date().toISOString(),
-                        userId: user.uid,
-                        provider: socialAccount.provider
+                        userId: user.uid
                     });
                 } catch (e) { console.error("Firestore error:", e); }
             }
