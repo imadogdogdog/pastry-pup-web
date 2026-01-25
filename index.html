@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Pastry Pup | Treats & Games</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Quicksand:wght@400;700&display=swap');
+
+        :root {
+            --pastry-gold: #FFD966;
+            --strawberry-pink: #FF99AC;
+            --pup-brown: #5E3023;
+            --creamy-white: #FFFBF2;
+            --mint-green: #B2E2D2;
+        }
+
+        body {
+            font-family: 'Quicksand', sans-serif;
+            background-color: var(--creamy-white);
+            color: var(--pup-brown);
+            margin: 0;
+            overflow-x: hidden;
+            touch-action: manipulation;
+        }
+
+        .btn-primary {
+            background-color: var(--pastry-gold);
+            color: var(--pup-brown);
+            font-weight: bold;
+            padding: 1rem 2rem;
+            border-radius: 9999px;
+            box-shadow: 0 4px 0px #e0bd4d;
+            transition: all 0.2s;
+        }
+
+        .btn-primary:active {
+            transform: translateY(2px);
+            box-shadow: 0 2px 0px #e0bd4d;
+        }
+
+        #game-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            display: none;
+            background: var(--creamy-white);
+            z-index: 50;
+        }
+
+        canvas {
+            display: block;
+            touch-action: none;
+        }
+
+        .floating {
+            animation: float 3s ease-in-out infinite;
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-10px); }
+        }
+
+        .heart-pop {
+            animation: pop 0.3s ease-out;
+        }
+
+        @keyframes pop {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.4); }
+            100% { transform: scale(1); }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- LANDING PAGE -->
+    <div id="landing-page" class="min-height-screen flex flex-col items-center justify-center p-6 text-center">
+        <div class="mb-8 floating">
+            <!-- Simplified SVG Logo -->
+            <svg width="180" height="180" viewBox="0 0 200 200">
+                <circle cx="100" cy="110" r="60" fill="#f3d5b5" /> <!-- Head -->
+                <path d="M40 80 Q20 80 30 130 Q40 140 60 120" fill="#d4a373" /> <!-- Ear L -->
+                <path d="M160 80 Q180 80 170 130 Q160 140 140 120" fill="#d4a373" /> <!-- Ear R -->
+                <circle cx="80" cy="105" r="8" fill="#333" /> <!-- Eye L -->
+                <circle cx="120" cy="105" r="8" fill="#333" /> <!-- Eye R -->
+                <circle cx="100" cy="120" r="6" fill="#5E3023" /> <!-- Nose -->
+                <path d="M90 130 Q100 140 110 130" stroke="#5E3023" stroke-width="3" fill="none" /> <!-- Mouth -->
+                <circle cx="70" cy="115" r="6" fill="#FF99AC" opacity="0.5" /> <!-- Blush L -->
+                <circle cx="130" cy="115" r="6" fill="#FF99AC" opacity="0.5" /> <!-- Blush R -->
+            </svg>
+            <h1 class="text-5xl font-bold mt-4 tracking-tight" style="color: var(--pup-brown)">PASTRY PUP</h1>
+            <p class="text-xl mt-2 opacity-80">Baked with love, just for you!</p>
+        </div>
+
+        <div class="space-y-4 w-full max-w-xs">
+            <button onclick="startGame()" class="btn-primary w-full text-2xl">PLAY GAME</button>
+            <button onclick="scrollToAbout()" class="text-sm underline opacity-60">About Our Bakery</button>
+        </div>
+
+        <!-- ABOUT SECTION -->
+        <div id="about" class="mt-24 max-w-2xl px-4">
+            <h2 class="text-3xl font-bold mb-4">Our Story</h2>
+            <p class="text-lg leading-relaxed mb-6">
+                Pastry Pup started with a simple idea: treats should be as cute as they are delicious. 
+                Our Master Baker (and her golden retriever, Biscuit) hand-craft every macaron, cupcake, and cookie 
+                to bring a smile to your face.
+            </p>
+            <div class="grid grid-cols-3 gap-4 mb-12">
+                <div class="bg-white p-4 rounded-2xl shadow-sm">🧁<br><span class="text-xs">Cupcakes</span></div>
+                <div class="bg-white p-4 rounded-2xl shadow-sm">🍪<br><span class="text-xs">Cookies</span></div>
+                <div class="bg-white p-4 rounded-2xl shadow-sm">🥯<br><span class="text-xs">Donuts</span></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- GAME OVERLAY -->
+    <div id="game-container">
+        <div class="absolute top-6 left-6 right-6 flex justify-between items-center pointer-events-none z-10">
+            <div class="text-2xl font-bold">Score: <span id="game-score">0</span></div>
+            <div id="game-hearts" class="flex gap-1 text-3xl">❤️❤️❤️</div>
+        </div>
+
+        <canvas id="gameCanvas"></canvas>
+
+        <!-- PAUSE/OVER MODAL -->
+        <div id="modal-overlay" class="hidden fixed inset-0 bg-black/40 flex items-center justify-center p-6 z-20">
+            <div class="bg-white rounded-3xl p-8 w-full max-w-sm text-center shadow-2xl">
+                <h2 id="modal-title" class="text-4xl font-bold mb-2">Game Over!</h2>
+                <p id="modal-msg" class="text-xl mb-6">Pastry Pup is full!</p>
+                <div class="bg-gray-100 rounded-2xl p-4 mb-6">
+                    <span class="block text-sm uppercase opacity-50">Your Score</span>
+                    <span id="final-score" class="text-5xl font-bold text-pink-500">0</span>
+                </div>
+                <button onclick="resetGame()" class="btn-primary w-full text-xl mb-3">PLAY AGAIN</button>
+                <button onclick="exitGame()" class="w-full text-sm opacity-60">Back to Home</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const scoreEl = document.getElementById('game-score');
+        const heartsEl = document.getElementById('game-hearts');
+        const modal = document.getElementById('modal-overlay');
+        const finalScoreEl = document.getElementById('final-score');
+
+        let gameActive = false;
+        let score = 0;
+        let hearts = 3;
+        let objects = [];
+        let lastSpawn = 0;
+        let spawnRate = 1200;
+        let gameSpeed = 2.5;
+
+        const TREATS = ['🧁', '🍪', '🍩', '🍰', '🥐', '🥯'];
+        const BUGS = ['🪲', '🪳', '🦟', '🕷️'];
+
+        function resize() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+
+        window.addEventListener('resize', resize);
+        resize();
+
+        class FallingObject {
+            constructor() {
+                this.size = 50;
+                this.x = 40 + Math.random() * (canvas.width - 80);
+                this.y = -60;
+                this.speed = gameSpeed + Math.random() * 2;
+                this.rotation = Math.random() * Math.PI * 2;
+                this.rotSpeed = (Math.random() - 0.5) * 0.05;
+                this.isBug = Math.random() < 0.25; // 25% bug rate
+                this.char = this.isBug ? 
+                    BUGS[Math.floor(Math.random() * BUGS.length)] : 
+                    TREATS[Math.floor(Math.random() * TREATS.length)];
+                this.clicked = false;
+            }
+
+            update() {
+                this.y += this.speed;
+                this.rotation += this.rotSpeed;
+            }
+
+            draw() {
+                ctx.save();
+                ctx.translate(this.x, this.y);
+                ctx.rotate(this.rotation);
+                ctx.font = "50px Arial";
+                ctx.textAlign = "center";
+                ctx.textBaseline = "middle";
+                ctx.fillText(this.char, 0, 0);
+                ctx.restore();
+            }
+        }
+
+        function spawn(timestamp) {
+            if (timestamp - lastSpawn > spawnRate) {
+                objects.push(new FallingObject());
+                lastSpawn = timestamp;
+                
+                // Increase difficulty gradually
+                if (spawnRate > 450) spawnRate -= 5;
+                if (gameSpeed < 8) gameSpeed += 0.02;
+            }
+        }
+
+        function loop(timestamp) {
+            if (!gameActive) return;
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            spawn(timestamp);
+
+            for (let i = objects.length - 1; i >= 0; i--) {
+                const obj = objects[i];
+                obj.update();
+                obj.draw();
+
+                // Check if missed treat
+                if (obj.y > canvas.height + 50) {
+                    if (!obj.isBug) {
+                        // Optional penalty for missing treats could go here
+                    }
+                    objects.splice(i, 1);
+                }
+            }
+
+            requestAnimationFrame(loop);
+        }
+
+        function handleInteraction(e) {
+            if (!gameActive) return;
+            
+            const x = e.touches ? e.touches[0].clientX : e.clientX;
+            const y = e.touches ? e.touches[0].clientY : e.clientY;
+
+            for (let i = objects.length - 1; i >= 0; i--) {
+                const obj = objects[i];
+                const dx = x - obj.x;
+                const dy = y - obj.y;
+                const distance = Math.sqrt(dx*dx + dy*dy);
+
+                if (distance < 50) {
+                    if (obj.isBug) {
+                        hitBug();
+                    } else {
+                        hitTreat();
+                    }
+                    objects.splice(i, 1);
+                    return;
+                }
+            }
+        }
+
+        function hitTreat() {
+            score += 10;
+            scoreEl.innerText = score;
+            scoreEl.classList.add('heart-pop');
+            setTimeout(() => scoreEl.classList.remove('heart-pop'), 300);
+        }
+
+        function hitBug() {
+            hearts--;
+            updateHeartsUI();
+            if (hearts <= 0) {
+                gameOver();
+            }
+        }
+
+        function updateHeartsUI() {
+            heartsEl.innerText = "❤️".repeat(hearts) + "🖤".repeat(3 - hearts);
+            heartsEl.classList.add('heart-pop');
+            setTimeout(() => heartsEl.classList.remove('heart-pop'), 300);
+        }
+
+        function startGame() {
+            document.getElementById('landing-page').style.display = 'none';
+            document.getElementById('game-container').style.display = 'block';
+            resetGame();
+        }
+
+        function resetGame() {
+            score = 0;
+            hearts = 3;
+            objects = [];
+            spawnRate = 1200;
+            gameSpeed = 2.5;
+            gameActive = true;
+            modal.classList.add('hidden');
+            scoreEl.innerText = "0";
+            updateHeartsUI();
+            requestAnimationFrame(loop);
+        }
+
+        function gameOver() {
+            gameActive = false;
+            finalScoreEl.innerText = score;
+            modal.classList.remove('hidden');
+        }
+
+        function exitGame() {
+            gameActive = false;
+            document.getElementById('landing-page').style.display = 'flex';
+            document.getElementById('game-container').style.display = 'none';
+            modal.classList.add('hidden');
+        }
+
+        function scrollToAbout() {
+            document.getElementById('about').scrollIntoView({ behavior: 'smooth' });
+        }
+
+        canvas.addEventListener('touchstart', (e) => { e.preventDefault(); handleInteraction(e); }, {passive: false});
+        canvas.addEventListener('mousedown', handleInteraction);
+
+    </script>
+</body>
+</html>
