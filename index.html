@@ -1,359 +1,675 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Pastry Pup | Snack Snatch</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
-    <style>
-        @import url('https://fonts.googleapis.com/css2?family=Quicksand:wght@400;700;800&display=swap');
+import React, { useState, useEffect, useRef } from 'react';
+import { 
+  ShoppingBag, 
+  Menu, 
+  X, 
+  ChevronRight, 
+  Star, 
+  Heart, 
+  Gamepad2,
+  Trophy,
+  UserCircle,
+  Sparkles,
+  Rocket,
+  Cpu,
+  Users,
+  PartyPopper,
+  Settings,
+  Plus,
+  Trash2,
+  Lock,
+  Unlock,
+  Upload,
+  Link as LinkIcon,
+  Home
+} from 'lucide-react';
 
-        :root {
-            --pastry-gold: #FFD966;
-            --strawberry-pink: #FF99AC;
-            --pup-brown: #5E3023;
-            --creamy-white: #FFFBF2;
-            --mint-green: #B2E2D2;
+// --- Constants ---
+const TREATS = ['🧁', '🍪', '🍩', '🍰', '🥐', '🥯'];
+const BUGS = ['🪲', '🪳', '🦟', '🕷️'];
+const INITIAL_PRODUCTS = [
+  {
+    id: 1,
+    name: "The 'Golden Retriever' Sugar Cookies",
+    description: "Soft, buttery vanilla bean sugar cookies that are pure sunshine. Topped with golden royal icing.",
+    price: 24.00,
+    category: "Signature Sweets",
+    image: "https://images.unsplash.com/photo-1558961363-fa8fdf82db35?auto=format&fit=crop&q=80&w=400"
+  },
+  {
+    id: 2,
+    name: "Dalmatian Chocolate Chip Loaf",
+    description: "Double chocolate marble cake with white chocolate spots. A favorite for tea time.",
+    price: 18.50,
+    category: "Loaves & Cakes",
+    image: "https://images.unsplash.com/photo-1586985289906-40698897d504?auto=format&fit=crop&q=80&w=400"
+  }
+];
+
+// --- Game Component (Canvas Based) ---
+const PastryPupGame = ({ onExit }) => {
+  const canvasRef = useRef(null);
+  const [gameState, setGameState] = useState('playing'); // playing, won, lost
+  const [score, setScore] = useState(0);
+  const [lives, setLives] = useState(3);
+  const [finalScore, setFinalScore] = useState(0);
+
+  // Game Logic Refs (to avoid React render cycle overhead)
+  const gameRef = useRef({
+    active: true,
+    playerX: window.innerWidth / 2,
+    items: [],
+    lastSpawn: 0,
+    spawnTime: 1200,
+    speed: 3.5,
+    lastMilestone: 0,
+    score: 0,
+    lives: 3
+  });
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext('2d');
+    
+    const handleResize = () => {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    };
+    window.addEventListener('resize', handleResize);
+    handleResize();
+
+    class Item {
+      constructor() {
+        this.r = 25;
+        this.x = this.r + Math.random() * (canvas.width - this.r * 2);
+        this.y = -50;
+        this.v = gameRef.current.speed + Math.random() * (gameRef.current.speed * 0.4);
+        this.rot = Math.random() * Math.PI * 2;
+        this.rv = (Math.random() - 0.5) * 0.1;
+        const bugChance = 0.2 + (gameRef.current.score / 350);
+        this.isBug = Math.random() < Math.min(bugChance, 0.45);
+        this.emoji = this.isBug ? BUGS[Math.floor(Math.random() * BUGS.length)] : TREATS[Math.floor(Math.random() * TREATS.length)];
+      }
+      update() { this.y += this.v; this.rot += this.rv; }
+      draw(ctx) {
+        ctx.save();
+        ctx.translate(this.x, this.y);
+        ctx.rotate(this.rot);
+        ctx.font = "40px Arial";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(this.emoji, 0, 0);
+        ctx.restore();
+      }
+    }
+
+    const drawPlayer = (ctx, x) => {
+      const yPos = canvas.height - 110;
+      ctx.save();
+      ctx.translate(x, yPos);
+      
+      // Ears
+      ctx.fillStyle = "#d4a373";
+      ctx.strokeStyle = "#5E3023";
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.ellipse(-50, -10, 25, 45, Math.PI / 8, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      ctx.beginPath(); ctx.ellipse(50, -10, 25, 45, -Math.PI / 8, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      
+      // Head
+      ctx.fillStyle = "#f3d5b5";
+      ctx.beginPath(); ctx.roundRect(-45, -40, 90, 80, 40); ctx.fill(); ctx.stroke();
+      
+      // Details
+      ctx.fillStyle = "white";
+      ctx.beginPath(); ctx.ellipse(0, -25, 12, 30, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = "#333";
+      ctx.beginPath(); ctx.arc(-22, -12, 6, 0, Math.PI * 2); ctx.fill(); 
+      ctx.beginPath(); ctx.arc(22, -12, 6, 0, Math.PI * 2); ctx.fill(); 
+      ctx.fillStyle = "#5E3023";
+      ctx.beginPath(); ctx.arc(0, 10, 6, 0, Math.PI * 2); ctx.fill();
+      
+      // Paws
+      ctx.fillStyle = "white";
+      ctx.beginPath(); ctx.arc(-35, 45, 12, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      ctx.beginPath(); ctx.arc(35, 45, 12, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      
+      ctx.restore();
+    };
+
+    let animationFrame;
+    const loop = (t) => {
+      if (!gameRef.current.active) return;
+      
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      
+      // Spawn items
+      if (t - gameRef.current.lastSpawn > gameRef.current.spawnTime) {
+        gameRef.current.items.push(new Item());
+        gameRef.current.lastSpawn = t;
+      }
+
+      drawPlayer(ctx, gameRef.current.playerX);
+
+      const playerY = canvas.height - 110;
+      for (let i = gameRef.current.items.length - 1; i >= 0; i--) {
+        const it = gameRef.current.items[i];
+        it.update();
+        it.draw(ctx);
+
+        // Collision
+        const dx = Math.abs(it.x - gameRef.current.playerX);
+        const dy = Math.abs(it.y - playerY);
+        if (dx < 60 && dy < 50) {
+          if (it.isBug) {
+            gameRef.current.lives--;
+            setLives(gameRef.current.lives);
+            if (gameRef.current.lives <= 0) {
+              endGame(false);
+            }
+          } else {
+            gameRef.current.score++;
+            setScore(gameRef.current.score);
+            if (gameRef.current.score >= 100) endGame(true);
+            else if (gameRef.current.score % 10 === 0 && gameRef.current.score !== gameRef.current.lastMilestone) {
+              gameRef.current.lastMilestone = gameRef.current.score;
+              gameRef.current.speed += 0.8;
+              gameRef.current.spawnTime = Math.max(400, gameRef.current.spawnTime - 100);
+            }
+          }
+          gameRef.current.items.splice(i, 1);
+          continue;
         }
 
-        body {
-            font-family: 'Quicksand', sans-serif;
-            background-color: var(--creamy-white);
-            color: var(--pup-brown);
-            margin: 0;
-            overflow: hidden;
-            touch-action: none;
+        if (it.y > canvas.height + 50) {
+          gameRef.current.items.splice(i, 1);
         }
+      }
 
-        .btn-primary {
-            background-color: var(--pastry-gold);
-            color: var(--pup-brown);
-            font-weight: 800;
-            padding: 1.25rem 2.5rem;
-            border-radius: 9999px;
-            box-shadow: 0 8px 0px #e0bd4d;
-            transition: all 0.1s;
-            letter-spacing: 0.05em;
-        }
+      animationFrame = requestAnimationFrame(loop);
+    };
 
-        .btn-primary:active {
-            transform: translateY(4px);
-            box-shadow: 0 4px 0px #e0bd4d;
-        }
+    const endGame = (win) => {
+      gameRef.current.active = false;
+      setFinalScore(gameRef.current.score);
+      setGameState(win ? 'won' : 'lost');
+    };
 
-        #game-container {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100vw;
-            height: 100vh;
-            display: none;
-            background: var(--creamy-white);
-            z-index: 50;
-        }
+    const handleMove = (e) => {
+      const x = e.touches ? e.touches[0].clientX : e.clientX;
+      gameRef.current.playerX = Math.max(60, Math.min(canvas.width - 60, x));
+    };
 
-        .logo-float {
-            animation: float 4s ease-in-out infinite;
-        }
+    window.addEventListener('mousemove', handleMove);
+    window.addEventListener('touchmove', handleMove, { passive: false });
+    animationFrame = requestAnimationFrame(loop);
 
-        @keyframes float {
-            0%, 100% { transform: translateY(0) rotate(-1deg); }
-            50% { transform: translateY(-15px) rotate(1deg); }
-        }
+    return () => {
+      gameRef.current.active = false;
+      cancelAnimationFrame(animationFrame);
+      window.removeEventListener('resize', handleResize);
+      window.removeEventListener('mousemove', handleMove);
+      window.removeEventListener('touchmove', handleMove);
+    };
+  }, []);
 
-        .score-pop {
-            animation: pop 0.2s ease-out;
-            color: var(--strawberry-pink);
-        }
+  const resetGame = () => {
+    gameRef.current = {
+      active: true,
+      playerX: window.innerWidth / 2,
+      items: [],
+      lastSpawn: performance.now(),
+      spawnTime: 1200,
+      speed: 3.5,
+      lastMilestone: 0,
+      score: 0,
+      lives: 3
+    };
+    setScore(0);
+    setLives(3);
+    setGameState('playing');
+  };
 
-        @keyframes pop {
-            0% { transform: scale(1); }
-            50% { transform: scale(1.3); }
-            100% { transform: scale(1); }
-        }
-
-        .pup-logo-img {
-            filter: drop-shadow(0 10px 15px rgba(0,0,0,0.1));
-            object-fit: contain;
-        }
-    </style>
-</head>
-<body>
-
-    <!-- REUSABLE LOGO COMPONENT -->
-    <template id="full-logo-template">
-        <div class="flex flex-col items-center">
-            <!-- 
-                Using "logo.png" as the relative path. 
-                Ensure logo.png is in the same folder as index.html in your repository.
-            -->
-            <img src="logo.png" 
-                 alt="Pastry Pup Logo" 
-                 class="w-64 h-64 md:w-80 md:h-80 pup-logo-img"
-                 onerror="this.style.opacity='0'">
-            
-            <h1 class="text-6xl font-[900] -mt-10 tracking-tighter" style="color: var(--pup-brown); -webkit-text-stroke: 1.5px white; filter: drop-shadow(2px 4px 0px var(--pastry-gold));">
-                PASTRY PUP
-            </h1>
+  return (
+    <div className="fixed inset-0 bg-orange-50 z-[200] overflow-hidden flex flex-col">
+      {/* HUD */}
+      <div className="absolute top-6 left-6 right-6 flex justify-between items-center pointer-events-none z-10">
+        <div className="text-2xl font-black bg-white/90 px-6 py-3 rounded-full shadow-xl border-2 border-orange-200">
+          TREATS: <span className="text-orange-500">{score}</span>
+          <span className="text-xs opacity-30 ml-1">/100</span>
         </div>
-    </template>
-
-    <!-- HOME SCREEN -->
-    <div id="home-screen" class="min-h-screen flex flex-col items-center justify-center p-6 text-center">
-        <div id="logo-dest-home" class="logo-float mb-12"></div>
-        <div class="space-y-6 w-full max-w-xs">
-            <button onclick="startGame()" class="btn-primary w-full text-2xl uppercase">Play Game</button>
-            <div class="flex flex-col gap-4">
-                <p class="text-sm font-bold opacity-40 uppercase tracking-widest italic">Slide Pastry Pup to catch treats!</p>
-                <a href="https://imadogdogdog.github.io/pastry-pup-web/interactives.html#" 
-                   class="inline-block text-xs font-black text-[--pup-brown] opacity-60 hover:opacity-100 uppercase tracking-widest border-b-2 border-transparent hover:border-[--pastry-gold] transition-all">
-                   More Interactives
-                </a>
-            </div>
+        <div className="flex gap-2 text-3xl bg-white/90 px-4 py-2 rounded-full shadow-lg border-2 border-pink-100">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <span key={i} className={i < lives ? "opacity-100" : "opacity-20 grayscale"}>❤️</span>
+          ))}
         </div>
+      </div>
+
+      <canvas ref={canvasRef} className="flex-1 cursor-none touch-none bg-gradient-to-b from-orange-50 to-white" />
+
+      {/* Game Over / Win Modals */}
+      {gameState !== 'playing' && (
+        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-md flex items-center justify-center p-6 z-50">
+          <div className="bg-white rounded-[3rem] p-10 w-full max-w-sm text-center shadow-2xl animate-in zoom-in-95 duration-300">
+             <div className="w-20 h-20 bg-orange-100 rounded-full flex items-center justify-center text-orange-500 mx-auto mb-6">
+                {gameState === 'won' ? <Trophy size={40} /> : <Gamepad2 size={40} />}
+             </div>
+             <h2 className={`text-4xl font-black mb-2 ${gameState === 'won' ? 'text-pink-500' : 'text-slate-800'}`}>
+               {gameState === 'won' ? "PRO BARKER!" : "GAME OVER"}
+             </h2>
+             <p className="text-slate-500 mb-8">
+               {gameState === 'won' ? "You caught all 100 treats!" : "The bugs got to the pastries first!"}
+             </p>
+             
+             <div className="bg-orange-50 rounded-3xl p-6 mb-8 border-2 border-orange-100">
+                <span className="block text-[10px] uppercase font-black tracking-[0.2em] text-orange-400 mb-1">Final Score</span>
+                <span className="text-6xl font-black text-slate-800">{finalScore}</span>
+             </div>
+
+             <div className="flex flex-col gap-3">
+               <button onClick={resetGame} className="py-4 bg-pink-500 text-white rounded-2xl font-bold text-lg shadow-lg hover:bg-pink-600 transition-all">
+                 PLAY AGAIN
+               </button>
+               <button onClick={onExit} className="py-3 text-slate-400 font-bold uppercase text-xs tracking-widest hover:text-slate-600">
+                 Back to Bakery
+               </button>
+             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Mobile Exit */}
+      <button onClick={onExit} className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-white/50 backdrop-blur p-4 rounded-full text-slate-400 hover:text-slate-800 md:hidden">
+        <X size={24} />
+      </button>
     </div>
+  );
+};
 
-    <!-- GAME OVERLAY -->
-    <div id="game-container">
-        <div id="flash-overlay" class="pointer-events-none absolute inset-0 z-0"></div>
-        <div class="absolute top-6 left-6 right-6 flex justify-between items-center pointer-events-none z-10">
-            <div class="text-2xl font-black bg-white/90 px-5 py-2 rounded-full shadow-sm border-2 border-[--pastry-gold]">
-                SCORE: <span id="current-score">0</span><span class="text-xs opacity-30">/100</span>
-            </div>
-            <div id="hearts-display" class="flex gap-1 text-3xl">❤️❤️❤️</div>
+// --- Main App Component ---
+export default function App() {
+  const [currentPage, setCurrentPage] = useState('home'); // home, arcade, portal
+  const [products, setProducts] = useState(INITIAL_PRODUCTS);
+  const [cart, setCart] = useState([]);
+  const [isCartOpen, setIsCartOpen] = useState(false);
+  const [activeCategory, setActiveCategory] = useState("All");
+
+  // Portal States
+  const [portalPass, setPortalPass] = useState('');
+  const [isAuthed, setIsAuthed] = useState(false);
+  const [portalForm, setPortalForm] = useState({ name: '', description: '', price: '', category: 'Signature Sweets', image: '' });
+  const fileInputRef = useRef(null);
+
+  const handleFileUpload = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => setPortalForm({ ...portalForm, image: reader.result });
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleAddProduct = (e) => {
+    e.preventDefault();
+    const newProd = { ...portalForm, id: Date.now(), price: parseFloat(portalForm.price) };
+    setProducts([newProd, ...products]);
+    setPortalForm({ name: '', description: '', price: '', category: 'Signature Sweets', image: '' });
+  };
+
+  if (currentPage === 'arcade') {
+    return <PastryPupGame onExit={() => setCurrentPage('home')} />;
+  }
+
+  return (
+    <div className="min-h-screen bg-white text-slate-900 selection:bg-pink-100 selection:text-pink-600">
+      {/* Navigation */}
+      <nav className="fixed top-0 w-full bg-white/90 backdrop-blur-md z-[100] border-b border-orange-50 h-20 px-6">
+        <div className="max-w-7xl mx-auto h-full flex items-center justify-between">
+          <div onClick={() => setCurrentPage('home')} className="flex items-center gap-2 cursor-pointer">
+            <div className="w-10 h-10 bg-pink-500 rounded-full flex items-center justify-center text-white font-black shadow-lg">P</div>
+            <span className="text-2xl font-black tracking-tight">Pastry Pup</span>
+          </div>
+          
+          <div className="hidden md:flex items-center gap-10">
+            <button onClick={() => setCurrentPage('home')} className={`font-bold transition-colors ${currentPage === 'home' ? 'text-pink-500' : 'text-slate-400 hover:text-slate-900'}`}>Bakery</button>
+            <button onClick={() => setCurrentPage('arcade')} className="font-bold text-slate-400 hover:text-slate-900 flex items-center gap-2">
+              <Gamepad2 size={18} /> Arcade
+            </button>
+            <button onClick={() => setCurrentPage('portal')} className={`font-bold transition-colors ${currentPage === 'portal' ? 'text-pink-500' : 'text-slate-400 hover:text-slate-900'}`}>Baker's Portal</button>
+          </div>
+
+          <div className="flex items-center gap-4">
+            <button onClick={() => setIsCartOpen(true)} className="relative p-2 bg-orange-50 rounded-full text-slate-700 hover:bg-pink-50 transition-colors">
+              <ShoppingBag size={22} />
+              {cart.length > 0 && <span className="absolute -top-1 -right-1 bg-pink-500 text-white text-[10px] w-5 h-5 rounded-full flex items-center justify-center border-2 border-white font-black">{cart.length}</span>}
+            </button>
+          </div>
         </div>
+      </nav>
 
-        <canvas id="gameCanvas"></canvas>
-
-        <div id="modal" class="hidden fixed inset-0 bg-[#5E3023]/70 backdrop-blur-md flex items-center justify-center p-6 z-20">
-            <div class="bg-white rounded-[40px] p-8 w-full max-w-sm text-center shadow-2xl relative overflow-hidden">
-                <div id="logo-dest-modal" class="scale-75 -my-12"></div>
-                <h2 id="modal-title" class="text-4xl font-black mb-2">GOOD JOB!</h2>
-                <p id="modal-msg" class="text-lg mb-6 font-medium opacity-60">You're a pastry pro!</p>
-                <div class="bg-amber-50 rounded-3xl p-6 mb-8 border-2 border-amber-100">
-                    <span class="block text-xs uppercase font-black tracking-widest opacity-40 mb-1">Treats Caught</span>
-                    <span id="final-score" class="text-6xl font-[900] text-amber-500">0</span>
+      {currentPage === 'home' ? (
+        <main className="pt-20">
+          {/* Hero */}
+          <header className="relative py-24 px-6 overflow-hidden">
+            <div className="max-w-7xl mx-auto grid lg:grid-cols-2 gap-16 items-center">
+              <div className="space-y-8 relative z-10">
+                <div className="inline-flex items-center gap-2 px-4 py-1.5 bg-pink-50 text-pink-600 rounded-full text-xs font-black uppercase tracking-widest">
+                  <Star size={14} /> New! Puppy Paws Shortbread
                 </div>
-                <div class="flex flex-col gap-3">
-                    <button onclick="resetGame()" class="btn-primary w-full text-xl py-4">PLAY AGAIN</button>
-                    <button onclick="goToHome()" class="text-sm font-bold opacity-40 uppercase tracking-widest py-2">Main Menu</button>
+                <h1 className="text-6xl md:text-8xl font-black leading-[0.9]">
+                  Barking <br/><span className="text-pink-500">Delicious</span>.
+                </h1>
+                <p className="text-xl text-slate-500 max-w-md leading-relaxed">
+                  The world's first human-only bakery inspired by the whimsical world of puppies. Founded by Lucy.
+                </p>
+                <div className="flex flex-wrap gap-4 pt-4">
+                  <button onClick={() => {
+                    document.getElementById('bakery-menu').scrollIntoView({ behavior: 'smooth' });
+                  }} className="px-10 py-5 bg-slate-900 text-white rounded-[2rem] font-black text-lg hover:scale-105 transition-transform shadow-2xl">
+                    Shop the Menu
+                  </button>
+                  <button onClick={() => setCurrentPage('arcade')} className="px-10 py-5 bg-white border-4 border-orange-100 text-slate-900 rounded-[2rem] font-black text-lg hover:border-pink-200 transition-all flex items-center gap-3">
+                    <Gamepad2 /> Play Arcade
+                  </button>
                 </div>
+              </div>
+              <div className="relative">
+                <div className="absolute -top-10 -right-10 w-64 h-64 bg-pink-100 rounded-full blur-3xl opacity-50" />
+                <img src="https://images.unsplash.com/photo-1558961363-fa8fdf82db35?auto=format&fit=crop&q=80&w=800" className="rounded-[3rem] shadow-2xl w-full aspect-square object-cover" alt="Pastries" />
+              </div>
             </div>
+          </header>
+
+          {/* Menu Section */}
+          <section id="bakery-menu" className="py-24 px-6 bg-slate-50/50">
+            <div className="max-w-7xl mx-auto">
+              <div className="flex flex-col md:flex-row md:items-end justify-between mb-12 gap-8">
+                <div>
+                  <h2 className="text-4xl font-black mb-4">Fresh from the Oven</h2>
+                  <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar">
+                    {["All", "Signature Sweets", "Loaves & Cakes", "Breakfast Treats"].map(cat => (
+                      <button 
+                        key={cat} 
+                        onClick={() => setActiveCategory(cat)}
+                        className={`px-6 py-2 rounded-full font-bold whitespace-nowrap transition-all ${activeCategory === cat ? 'bg-pink-500 text-white shadow-lg' : 'bg-white border border-slate-200 text-slate-500 hover:border-pink-200'}`}
+                      >
+                        {cat}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="hidden md:block text-right text-slate-400 font-bold text-xs uppercase tracking-widest">
+                  Baking Daily in the Pastry Pup Kitchen
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-10">
+                {products.filter(p => activeCategory === "All" || p.category === activeCategory).map(product => (
+                  <div key={product.id} className="group bg-white p-4 rounded-[2.5rem] border border-slate-100 hover:border-pink-100 transition-all hover:shadow-2xl hover:shadow-pink-50">
+                    <div className="relative aspect-[4/3] overflow-hidden rounded-[2rem] mb-6">
+                      <img src={product.image} className="w-full h-full object-cover transition-transform group-hover:scale-110 duration-700" alt="" />
+                      <button 
+                        onClick={() => {
+                          setCart([...cart, product]);
+                          setIsCartOpen(true);
+                        }}
+                        className="absolute bottom-4 right-4 bg-white p-4 rounded-2xl shadow-xl text-pink-500 opacity-0 group-hover:opacity-100 translate-y-4 group-hover:translate-y-0 transition-all hover:bg-pink-500 hover:text-white"
+                      >
+                        <ShoppingBag size={20} />
+                      </button>
+                    </div>
+                    <div className="px-2">
+                      <span className="text-[10px] font-black text-orange-400 uppercase tracking-widest">{product.category}</span>
+                      <h3 className="text-2xl font-black mb-2 mt-1">{product.name}</h3>
+                      <p className="text-slate-400 text-sm line-clamp-2 leading-relaxed mb-4">{product.description}</p>
+                      <div className="flex items-center justify-between pt-4 border-t border-slate-50">
+                        <span className="text-2xl font-black">${product.price.toFixed(2)}</span>
+                        <div className="flex text-pink-400"><Star size={14} fill="currentColor"/><Star size={14} fill="currentColor"/><Star size={14} fill="currentColor"/><Star size={14} fill="currentColor"/><Star size={14} fill="currentColor"/></div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </section>
+
+          {/* About */}
+          <section className="py-24 px-6 max-w-7xl mx-auto">
+            <div className="grid lg:grid-cols-2 gap-20 items-center">
+              <div className="order-2 lg:order-1 relative">
+                <div className="absolute inset-0 bg-orange-100 rounded-[4rem] -rotate-3 -z-10" />
+                <img src="https://images.unsplash.com/photo-1513151233558-d860c5398176?auto=format&fit=crop&q=80&w=600" className="rounded-[4rem] shadow-xl w-full" alt="Kitchen" />
+                <div className="absolute -bottom-8 -right-8 bg-white p-8 rounded-3xl shadow-2xl border border-pink-50 max-w-xs">
+                  <p className="text-pink-500 font-black italic text-lg">"The best cookies I've ever shared with my human!"</p>
+                  <p className="text-slate-400 text-xs mt-2">— A very happy golden retriever</p>
+                </div>
+              </div>
+              <div className="order-1 lg:order-2 space-y-8">
+                <h2 className="text-5xl font-black">Our Story starts at <span className="text-pink-500">Dollarama</span>.</h2>
+                <div className="space-y-4 text-lg text-slate-500 leading-relaxed">
+                  <p>When Lucy saw a small business kit at Dollarama, she didn't just see a toy—she saw a vision. A vision of cookies that look like dog treats but taste like gourmet heaven.</p>
+                  <p>Built as a family project with <strong>Daddy and Artificial Intelligence</strong>, Pastry Pup is about more than just sweets. It's about bringing a little more playfulness to the world.</p>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="p-6 bg-slate-50 rounded-3xl text-center">
+                    <p className="text-3xl font-black text-slate-900">100%</p>
+                    <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1">Human Grade</p>
+                  </div>
+                  <div className="p-6 bg-slate-50 rounded-3xl text-center">
+                    <p className="text-3xl font-black text-slate-900">∞</p>
+                    <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1">Pup Inspired</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+        </main>
+      ) : (
+        /* Portal View */
+        <main className="pt-32 pb-24 px-6 max-w-4xl mx-auto">
+          {!isAuthed ? (
+            <div className="text-center space-y-8 py-20">
+               <div className="w-24 h-24 bg-pink-100 rounded-full flex items-center justify-center text-pink-500 mx-auto">
+                  <Lock size={48} />
+               </div>
+               <div>
+                  <h1 className="text-4xl font-black mb-2">Baker's Access</h1>
+                  <p className="text-slate-500">Only Lucy and authorized bakers can enter.</p>
+               </div>
+               <div className="max-w-xs mx-auto space-y-4">
+                  <input 
+                    type="password" 
+                    placeholder="Kitchen Password" 
+                    className="w-full p-5 bg-slate-100 rounded-2xl text-center font-bold focus:ring-4 ring-pink-100 transition-all outline-none"
+                    value={portalPass}
+                    onChange={e => setPortalPass(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && portalPass === 'pickles!' && setIsAuthed(true)}
+                  />
+                  <button 
+                    onClick={() => portalPass === 'pickles!' ? setIsAuthed(true) : alert('Wrong whisk!')}
+                    className="w-full py-5 bg-slate-900 text-white rounded-2xl font-black hover:bg-slate-800 transition-all shadow-xl"
+                  >
+                    Enter Kitchen
+                  </button>
+               </div>
+            </div>
+          ) : (
+            <div className="space-y-12">
+               <div className="flex items-center justify-between">
+                  <h1 className="text-4xl font-black flex items-center gap-3">
+                     <Plus className="text-pink-500" /> New Pastry
+                  </h1>
+                  <button onClick={() => setIsAuthed(false)} className="px-4 py-2 text-slate-400 hover:text-slate-900 font-bold flex items-center gap-2">
+                    <Unlock size={16} /> Logout
+                  </button>
+               </div>
+
+               <form onSubmit={handleAddProduct} className="grid md:grid-cols-2 gap-10 bg-slate-50 p-10 rounded-[3rem] border border-slate-100">
+                  <div className="space-y-6">
+                    <div className="space-y-2">
+                       <label className="text-xs font-black uppercase tracking-widest text-slate-400 ml-1">Pastry Name</label>
+                       <input required placeholder="Beagle Bagel" className="w-full p-4 bg-white rounded-2xl border-2 border-transparent focus:border-pink-200 outline-none transition-all" value={portalForm.name} onChange={e => setPortalForm({...portalForm, name: e.target.value})} />
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                       <div className="space-y-2">
+                          <label className="text-xs font-black uppercase tracking-widest text-slate-400 ml-1">Price ($)</label>
+                          <input required type="number" step="0.01" placeholder="12.00" className="w-full p-4 bg-white rounded-2xl border-2 border-transparent focus:border-pink-200 outline-none transition-all" value={portalForm.price} onChange={e => setPortalForm({...portalForm, price: e.target.value})} />
+                       </div>
+                       <div className="space-y-2">
+                          <label className="text-xs font-black uppercase tracking-widest text-slate-400 ml-1">Category</label>
+                          <select className="w-full p-4 bg-white rounded-2xl border-2 border-transparent focus:border-pink-200 outline-none transition-all" value={portalForm.category} onChange={e => setPortalForm({...portalForm, category: e.target.value})}>
+                            <option>Signature Sweets</option>
+                            <option>Loaves & Cakes</option>
+                            <option>Breakfast Treats</option>
+                          </select>
+                       </div>
+                    </div>
+                    <div className="space-y-2">
+                       <label className="text-xs font-black uppercase tracking-widest text-slate-400 ml-1">Pastry Image</label>
+                       <div className="flex gap-2">
+                          <button type="button" onClick={() => fileInputRef.current?.click()} className="flex-1 p-4 bg-pink-50 text-pink-600 rounded-2xl border-2 border-dashed border-pink-200 font-bold text-sm flex items-center justify-center gap-2 hover:bg-pink-100 transition-colors">
+                            <Upload size={18} /> Upload Photo
+                          </button>
+                          <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleFileUpload} />
+                       </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-6">
+                    <div className="space-y-2">
+                       <label className="text-xs font-black uppercase tracking-widest text-slate-400 ml-1">Description</label>
+                       <textarea required placeholder="Buttery, flaky, and totally pawsome..." className="w-full h-32 p-4 bg-white rounded-2xl border-2 border-transparent focus:border-pink-200 outline-none transition-all resize-none" value={portalForm.description} onChange={e => setPortalForm({...portalForm, description: e.target.value})} />
+                    </div>
+                    
+                    <div className="h-40 bg-white rounded-[2rem] border-2 border-dashed border-slate-200 flex items-center justify-center overflow-hidden">
+                      {portalForm.image ? (
+                        <img src={portalForm.image} className="w-full h-full object-cover" alt="Preview" />
+                      ) : (
+                        <div className="text-center text-slate-300">
+                          <LinkIcon className="mx-auto mb-2" />
+                          <p className="text-[10px] font-black uppercase tracking-widest">Image Preview</p>
+                        </div>
+                      )}
+                    </div>
+
+                    <button className="w-full py-5 bg-pink-500 text-white rounded-2xl font-black text-lg shadow-xl shadow-pink-100 hover:scale-[1.02] active:scale-95 transition-all">
+                      Add to Menu
+                    </button>
+                  </div>
+               </form>
+
+               <div className="pt-10 space-y-6">
+                  <h2 className="text-2xl font-black">Live Inventory</h2>
+                  <div className="space-y-4">
+                    {products.map(p => (
+                      <div key={p.id} className="flex items-center justify-between p-4 bg-white rounded-3xl border border-slate-100 group hover:border-pink-100 transition-all">
+                        <div className="flex items-center gap-4">
+                          <img src={p.image} className="w-16 h-16 rounded-2xl object-cover" alt="" />
+                          <div>
+                            <p className="font-black text-slate-900">{p.name}</p>
+                            <p className="text-pink-500 font-bold">${p.price.toFixed(2)}</p>
+                          </div>
+                        </div>
+                        <button 
+                          onClick={() => setProducts(products.filter(item => item.id !== p.id))}
+                          className="p-4 text-slate-300 hover:text-red-500 transition-colors"
+                        >
+                          <Trash2 size={20} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+               </div>
+            </div>
+          )}
+        </main>
+      )}
+
+      {/* Cart Drawer */}
+      {isCartOpen && (
+        <div className="fixed inset-0 z-[1000] overflow-hidden">
+          <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => setIsCartOpen(false)} />
+          <div className="absolute inset-y-0 right-0 w-full max-w-md bg-white shadow-2xl flex flex-col">
+            <div className="p-8 border-b flex items-center justify-between bg-orange-50">
+              <h2 className="text-2xl font-black">Your Basket</h2>
+              <button onClick={() => setIsCartOpen(false)} className="p-2 hover:bg-white rounded-full transition-colors"><X /></button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-8 space-y-6">
+              {cart.length === 0 ? (
+                <div className="h-full flex flex-col items-center justify-center text-slate-300 text-center">
+                  <ShoppingBag size={64} className="mb-4 opacity-20" />
+                  <p className="font-bold">Your basket is empty!</p>
+                  <button onClick={() => setIsCartOpen(false)} className="mt-4 text-pink-500 font-black uppercase text-xs tracking-widest underline">Go Browsing</button>
+                </div>
+              ) : (
+                cart.map((item, i) => (
+                  <div key={i} className="flex gap-4">
+                    <img src={item.image} className="w-20 h-20 rounded-2xl object-cover" alt="" />
+                    <div className="flex-1 py-1">
+                      <p className="font-black text-slate-900">{item.name}</p>
+                      <p className="text-pink-500 font-bold">${item.price.toFixed(2)}</p>
+                      <button onClick={() => {
+                        const newCart = [...cart];
+                        newCart.splice(i, 1);
+                        setCart(newCart);
+                      }} className="text-[10px] font-black text-slate-400 hover:text-red-500 uppercase tracking-widest mt-2 transition-colors">Remove</button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+            <div className="p-8 border-t bg-slate-50">
+              <div className="flex justify-between items-center mb-8">
+                <span className="text-slate-400 font-bold uppercase tracking-widest text-xs">Subtotal</span>
+                <span className="text-3xl font-black">${cart.reduce((s, i) => s + i.price, 0).toFixed(2)}</span>
+              </div>
+              <button className="w-full py-5 bg-pink-500 text-white rounded-[2rem] font-black text-lg shadow-xl shadow-pink-100 hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-50" disabled={cart.length === 0}>
+                Checkout
+              </button>
+            </div>
+          </div>
         </div>
+      )}
+
+      {/* Footer */}
+      <footer className="bg-slate-900 text-white py-20 px-6">
+        <div className="max-w-7xl mx-auto grid md:grid-cols-3 gap-16">
+          <div className="space-y-6">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 bg-pink-500 rounded-full flex items-center justify-center text-white font-black text-sm">P</div>
+              <span className="text-2xl font-black">Pastry Pup</span>
+            </div>
+            <p className="text-slate-400 leading-relaxed">Made for humans. Inspired by pups. Born in a Dollarama kit. Built with Dad and AI.</p>
+          </div>
+          <div className="grid grid-cols-2 gap-8">
+            <div className="space-y-4">
+              <h4 className="font-black text-sm uppercase tracking-widest text-slate-500">Menu</h4>
+              <ul className="space-y-2 font-bold">
+                <li className="hover:text-pink-500 cursor-pointer transition-colors">Sweets</li>
+                <li className="hover:text-pink-500 cursor-pointer transition-colors">Loaves</li>
+                <li className="hover:text-pink-500 cursor-pointer transition-colors">Breakfast</li>
+              </ul>
+            </div>
+            <div className="space-y-4">
+              <h4 className="font-black text-sm uppercase tracking-widest text-slate-500">Fun</h4>
+              <ul className="space-y-2 font-bold">
+                <li onClick={() => setCurrentPage('arcade')} className="hover:text-pink-500 cursor-pointer transition-colors">Arcade</li>
+                <li className="hover:text-pink-500 cursor-pointer transition-colors">Trivia</li>
+              </ul>
+            </div>
+          </div>
+          <div className="space-y-6">
+            <h4 className="font-black text-sm uppercase tracking-widest text-slate-500">Newsletter</h4>
+            <div className="relative">
+              <input placeholder="paws@pup.com" className="w-full bg-slate-800 border-none rounded-2xl p-4 text-white focus:ring-2 ring-pink-500 transition-all outline-none" />
+              <button className="absolute right-2 top-2 bottom-2 px-4 bg-pink-500 rounded-xl font-bold">Join</button>
+            </div>
+          </div>
+        </div>
+        <div className="max-w-7xl mx-auto mt-20 pt-10 border-t border-slate-800 flex flex-col md:flex-row justify-between items-center gap-4 text-slate-500 text-xs font-bold uppercase tracking-widest">
+           <p>© 2024 Pastry Pup Bakery</p>
+           <p className="flex items-center gap-2">Built with <Heart size={12} className="text-pink-500" /> for Lucy</p>
+        </div>
+      </footer>
     </div>
-
-    <script>
-        // Inject Logo
-        const logoContent = document.getElementById('full-logo-template').content;
-        document.getElementById('logo-dest-home').appendChild(logoContent.cloneNode(true));
-        document.getElementById('logo-dest-modal').appendChild(logoContent.cloneNode(true));
-
-        const canvas = document.getElementById('gameCanvas');
-        const ctx = canvas.getContext('2d');
-        const scoreDisplay = document.getElementById('current-score');
-        const heartsDisplay = document.getElementById('hearts-display');
-        const modal = document.getElementById('modal');
-        const flashOverlay = document.getElementById('flash-overlay');
-
-        let active = false;
-        let score = 0;
-        let lives = 3;
-        let items = [];
-        let lastSpawn = 0;
-        let spawnTime = 1200;
-        let speed = 3.5;
-        let lastMilestone = 0;
-
-        // Player (Pastry Pup) State
-        let playerX = window.innerWidth / 2;
-        const playerWidth = 120;
-        const playerHeight = 120;
-
-        const TREATS = ['🧁', '🍪', '🍩', '🍰', '🥐', '🥯'];
-        const BUGS = ['🪲', '🪳', '🦟', '🕷️'];
-
-        function resize() {
-            canvas.width = window.innerWidth;
-            canvas.height = window.innerHeight;
-            playerX = canvas.width / 2;
-        }
-        window.addEventListener('resize', resize);
-        resize();
-
-        class Item {
-            constructor() {
-                this.r = 25;
-                this.x = this.r + Math.random() * (canvas.width - this.r * 2);
-                this.y = -50;
-                this.v = speed + Math.random() * (speed * 0.4);
-                this.rot = Math.random() * Math.PI * 2;
-                this.rv = (Math.random() - 0.5) * 0.1;
-                const bugChance = 0.2 + (score / 350);
-                this.isBug = Math.random() < Math.min(bugChance, 0.45);
-                this.emoji = this.isBug ? BUGS[Math.floor(Math.random() * BUGS.length)] : TREATS[Math.floor(Math.random() * TREATS.length)];
-            }
-            update() { this.y += this.v; this.rot += this.rv; }
-            draw() {
-                ctx.save();
-                ctx.translate(this.x, this.y);
-                ctx.rotate(this.rot);
-                ctx.font = "40px Arial";
-                ctx.textAlign = "center";
-                ctx.textBaseline = "middle";
-                ctx.fillText(this.emoji, 0, 0);
-                ctx.restore();
-            }
-        }
-
-        function drawPlayer() {
-            const yPos = canvas.height - 110;
-            ctx.save();
-            ctx.translate(playerX, yPos);
-            
-            // Tan Floppy Ears
-            ctx.fillStyle = "#d4a373";
-            ctx.strokeStyle = "#5E3023";
-            ctx.lineWidth = 2;
-            ctx.beginPath();
-            ctx.ellipse(-50, -10, 25, 45, Math.PI / 8, 0, Math.PI * 2);
-            ctx.fill(); ctx.stroke();
-            ctx.beginPath();
-            ctx.ellipse(50, -10, 25, 45, -Math.PI / 8, 0, Math.PI * 2);
-            ctx.fill(); ctx.stroke();
-            
-            // Head Base
-            ctx.fillStyle = "#f3d5b5";
-            ctx.beginPath();
-            ctx.roundRect(-45, -40, 90, 80, 40);
-            ctx.fill(); ctx.stroke();
-            
-            // White Blaze
-            ctx.fillStyle = "white";
-            ctx.beginPath();
-            ctx.ellipse(0, -25, 12, 30, 0, 0, Math.PI * 2);
-            ctx.fill();
-            
-            // Eyes
-            ctx.fillStyle = "#333";
-            ctx.beginPath();
-            ctx.arc(-22, -12, 6, 0, Math.PI * 2); ctx.fill(); 
-            ctx.beginPath();
-            ctx.arc(22, -12, 6, 0, Math.PI * 2); ctx.fill(); 
-            
-            // Nose
-            ctx.fillStyle = "#5E3023";
-            ctx.beginPath();
-            ctx.arc(0, 10, 6, 0, Math.PI * 2); ctx.fill();
-            
-            // Mouth
-            ctx.strokeStyle = "#5E3023";
-            ctx.lineWidth = 3;
-            ctx.beginPath();
-            ctx.arc(0, 15, 8, 0.1 * Math.PI, 0.9 * Math.PI);
-            ctx.stroke();
-
-            // Paws
-            ctx.fillStyle = "white";
-            ctx.beginPath(); ctx.arc(-35, 45, 12, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-            ctx.beginPath(); ctx.arc(35, 45, 12, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-            
-            ctx.restore();
-        }
-
-        function gameLoop(t) {
-            if (!active) return;
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            if (t - lastSpawn > spawnTime) {
-                items.push(new Item());
-                lastSpawn = t;
-            }
-            drawPlayer();
-            const playerY = canvas.height - 110;
-            for (let i = items.length - 1; i >= 0; i--) {
-                const it = items[i];
-                it.update();
-                it.draw();
-                const dx = Math.abs(it.x - playerX);
-                const dy = Math.abs(it.y - playerY);
-                if (dx < 60 && dy < 50) {
-                    if (it.isBug) {
-                        lives--;
-                        updateUI();
-                        flashOverlay.classList.add('bg-red-500/20');
-                        setTimeout(() => flashOverlay.classList.remove('bg-red-500/20'), 150);
-                        if (lives <= 0) endGame(false);
-                    } else {
-                        score++;
-                        updateUI();
-                        if (score >= 100) endGame(true);
-                        else if (score % 10 === 0 && score !== lastMilestone) {
-                            lastMilestone = score;
-                            speed += 1.2;
-                            spawnTime = Math.max(300, spawnTime - 150);
-                            flashOverlay.classList.add('bg-amber-500/10');
-                            setTimeout(() => flashOverlay.classList.remove('bg-amber-500/10'), 200);
-                        }
-                    }
-                    items.splice(i, 1);
-                    continue;
-                }
-                if (it.y > canvas.height + 50) {
-                    items.splice(i, 1);
-                }
-            }
-            requestAnimationFrame(gameLoop);
-        }
-
-        function movePlayer(e) {
-            if (!active) return;
-            const x = e.touches ? e.touches[0].clientX : e.clientX;
-            playerX = Math.max(60, Math.min(canvas.width - 60, x));
-        }
-
-        function updateUI() {
-            scoreDisplay.innerText = score;
-            heartsDisplay.innerText = "❤️".repeat(lives) + "🖤".repeat(3 - lives);
-            scoreDisplay.parentElement.classList.add('score-pop');
-            setTimeout(() => scoreDisplay.parentElement.classList.remove('score-pop'), 200);
-        }
-
-        function startGame() {
-            document.getElementById('home-screen').style.display = 'none';
-            document.getElementById('game-container').style.display = 'block';
-            resetGame();
-        }
-
-        function resetGame() {
-            score = 0; lives = 3; items = [];
-            spawnTime = 1200; speed = 3.5; lastMilestone = 0;
-            active = true;
-            modal.classList.add('hidden');
-            updateUI();
-            requestAnimationFrame(gameLoop);
-        }
-
-        function endGame(win) {
-            active = false;
-            document.getElementById('modal-title').innerText = win ? "PRO BARKER!" : "GAME OVER";
-            document.getElementById('modal-title').style.color = win ? "var(--strawberry-pink)" : "var(--pup-brown)";
-            document.getElementById('modal-msg').innerText = win ? "You caught all 100 treats!" : "Bugs got the treats!";
-            document.getElementById('final-score').innerText = score;
-            modal.classList.remove('hidden');
-            if (win) {
-                confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 }, colors: ['#FFD966', '#FF99AC', '#B2E2D2'] });
-            }
-        }
-
-        function goToHome() {
-            active = false;
-            document.getElementById('home-screen').style.display = 'flex';
-            document.getElementById('game-container').style.display = 'none';
-            modal.classList.add('hidden');
-        }
-
-        window.addEventListener('mousemove', movePlayer);
-        window.addEventListener('touchmove', (e) => { e.preventDefault(); movePlayer(e); }, {passive: false});
-    </script>
-</body>
-</html>
+  );
+}
