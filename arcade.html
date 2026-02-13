@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pastry Pup Arcade</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap');
+        
+        :root {
+            --pastry-gold: #FFD966;
+            --pup-brown: #5E3023;
+            --strawberry-pink: #FF99AC;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #FFF9F0;
+            margin: 0;
+            overflow: hidden;
+            user-select: none;
+            touch-action: none;
+        }
+
+        #game-container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+        }
+
+        canvas {
+            display: block;
+            background: radial-gradient(circle at center, #ffffff 0%, #fff4e6 100%);
+        }
+
+        .score-pop {
+            animation: pop 0.2s ease-out;
+        }
+
+        @keyframes pop {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+            100% { transform: scale(1); }
+        }
+
+        .btn-primary {
+            background-color: var(--strawberry-pink);
+            color: white;
+            font-weight: 900;
+            border-radius: 9999px;
+            box-shadow: 0 4px 14px 0 rgba(255, 153, 172, 0.39);
+            transition: all 0.2s;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(255, 153, 172, 0.23);
+        }
+    </style>
+</head>
+<body>
+
+    <div id="game-container">
+        <!-- Flash Effects Overlay -->
+        <div id="flash-overlay" class="pointer-events-none absolute inset-0 z-10 transition-colors duration-200"></div>
+
+        <!-- HUD -->
+        <div class="absolute top-6 left-6 right-6 flex justify-between items-center pointer-events-none z-20">
+            <div id="score-box" class="text-2xl font-black bg-white/90 px-6 py-3 rounded-full shadow-sm border-2 border-[#FFD966]">
+                SCORE: <span id="current-score" class="text-orange-500">0</span><span class="text-xs opacity-30">/100</span>
+            </div>
+            <div id="hearts-display" class="flex gap-1 text-3xl drop-shadow-sm">❤️❤️❤️</div>
+        </div>
+
+        <canvas id="gameCanvas"></canvas>
+
+        <!-- GAME OVER / WIN MODAL -->
+        <div id="modal" class="hidden fixed inset-0 bg-[#5E3023]/70 backdrop-blur-md flex items-center justify-center p-6 z-50">
+            <div class="bg-white rounded-[40px] p-8 w-full max-w-sm text-center shadow-2xl relative overflow-hidden">
+                <div class="text-6xl mb-4">🐶</div>
+                <h2 id="modal-title" class="text-4xl font-black mb-2">GOOD JOB!</h2>
+                <p id="modal-msg" class="text-lg mb-6 font-medium opacity-60">You're a pastry pro!</p>
+                
+                <div class="bg-amber-50 rounded-3xl p-6 mb-8 border-2 border-amber-100">
+                    <span class="block text-xs uppercase font-black tracking-widest opacity-40 mb-1">Treats Caught</span>
+                    <span id="final-score" class="text-6xl font-[900] text-amber-500">0</span>
+                </div>
+
+                <div class="flex flex-col gap-3">
+                    <button onclick="resetGame()" class="btn-primary w-full text-xl py-4">PLAY AGAIN</button>
+                    <button onclick="window.location.reload()" class="text-sm font-bold opacity-40 uppercase tracking-widest py-2">Back to Menu</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const scoreDisplay = document.getElementById('current-score');
+        const scoreBox = document.getElementById('score-box');
+        const heartsDisplay = document.getElementById('hearts-display');
+        const modal = document.getElementById('modal');
+        const flashOverlay = document.getElementById('flash-overlay');
+
+        let active = true;
+        let score = 0;
+        let lives = 3;
+        let items = [];
+        let lastSpawn = 0;
+        let spawnTime = 1200;
+        let speed = 3.5;
+        let lastMilestone = 0;
+
+        // Player (Pastry Pup) State
+        let playerX = window.innerWidth / 2;
+        const playerWidth = 120;
+        const playerHeight = 120;
+
+        const TREATS = ['🧁', '🍪', '🍩', '🍰', '🥐', '🥯'];
+        const BUGS = ['🪲', '🪳', '🦟', '🕷️'];
+
+        function resize() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            if (!active && items.length === 0) playerX = canvas.width / 2;
+        }
+        window.addEventListener('resize', resize);
+        resize();
+
+        class Item {
+            constructor() {
+                this.r = 25;
+                this.x = this.r + Math.random() * (canvas.width - this.r * 2);
+                this.y = -50;
+                this.v = speed + Math.random() * (speed * 0.4);
+                this.rot = Math.random() * Math.PI * 2;
+                this.rv = (Math.random() - 0.5) * 0.1;
+                const bugChance = 0.2 + (score / 350);
+                this.isBug = Math.random() < Math.min(bugChance, 0.45);
+                this.emoji = this.isBug ? BUGS[Math.floor(Math.random() * BUGS.length)] : TREATS[Math.floor(Math.random() * TREATS.length)];
+            }
+            update() { this.y += this.v; this.rot += this.rv; }
+            draw() {
+                ctx.save();
+                ctx.translate(this.x, this.y);
+                ctx.rotate(this.rot);
+                ctx.font = "45px Arial";
+                ctx.textAlign = "center";
+                ctx.textBaseline = "middle";
+                ctx.fillText(this.emoji, 0, 0);
+                ctx.restore();
+            }
+        }
+
+        function drawPlayer() {
+            const yPos = canvas.height - 120;
+            ctx.save();
+            ctx.translate(playerX, yPos);
+            
+            // Tan Floppy Ears
+            ctx.fillStyle = "#d4a373";
+            ctx.strokeStyle = "#5E3023";
+            ctx.lineWidth = 2;
+            ctx.beginPath(); ctx.ellipse(-50, -10, 25, 45, Math.PI / 8, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+            ctx.beginPath(); ctx.ellipse(50, -10, 25, 45, -Math.PI / 8, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+            
+            // Head Base
+            ctx.fillStyle = "#f3d5b5";
+            ctx.beginPath(); ctx.roundRect(-45, -40, 90, 80, 40); ctx.fill(); ctx.stroke();
+            
+            // White Blaze
+            ctx.fillStyle = "white";
+            ctx.beginPath(); ctx.ellipse(0, -25, 12, 30, 0, 0, Math.PI * 2); ctx.fill();
+            
+            // Eyes
+            ctx.fillStyle = "#333";
+            ctx.beginPath(); ctx.arc(-22, -12, 6, 0, Math.PI * 2); ctx.fill(); 
+            ctx.beginPath(); ctx.arc(22, -12, 6, 0, Math.PI * 2); ctx.fill(); 
+            
+            // Nose
+            ctx.fillStyle = "#5E3023";
+            ctx.beginPath(); ctx.arc(0, 10, 6, 0, Math.PI * 2); ctx.fill();
+            
+            // Mouth
+            ctx.strokeStyle = "#5E3023";
+            ctx.lineWidth = 3;
+            ctx.beginPath(); ctx.arc(0, 15, 8, 0.1 * Math.PI, 0.9 * Math.PI); ctx.stroke();
+
+            // Paws
+            ctx.fillStyle = "white";
+            ctx.beginPath(); ctx.arc(-35, 45, 12, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+            ctx.beginPath(); ctx.arc(35, 45, 12, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+            
+            ctx.restore();
+        }
+
+        function gameLoop(t) {
+            if (!active) return;
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            if (t - lastSpawn > spawnTime) {
+                items.push(new Item());
+                lastSpawn = t;
+            }
+
+            drawPlayer();
+
+            const playerY = canvas.height - 120;
+            for (let i = items.length - 1; i >= 0; i--) {
+                const it = items[i];
+                it.update();
+                it.draw();
+
+                // Collision Detection
+                const dx = Math.abs(it.x - playerX);
+                const dy = Math.abs(it.y - playerY);
+                if (dx < 60 && dy < 55) {
+                    if (it.isBug) {
+                        handleHit();
+                    } else {
+                        handleScore();
+                    }
+                    items.splice(i, 1);
+                    continue;
+                }
+
+                if (it.y > canvas.height + 50) {
+                    items.splice(i, 1);
+                }
+            }
+            requestAnimationFrame(gameLoop);
+        }
+
+        function handleHit() {
+            lives--;
+            updateUI();
+            flashOverlay.classList.add('bg-red-500/30');
+            setTimeout(() => flashOverlay.classList.remove('bg-red-500/30'), 150);
+            if (lives <= 0) endGame(false);
+        }
+
+        function handleScore() {
+            score++;
+            updateUI();
+            if (score >= 100) endGame(true);
+            else if (score % 10 === 0 && score !== lastMilestone) {
+                lastMilestone = score;
+                speed += 0.8;
+                spawnTime = Math.max(400, spawnTime - 100);
+                flashOverlay.classList.add('bg-amber-500/10');
+                setTimeout(() => flashOverlay.classList.remove('bg-amber-500/10'), 200);
+            }
+        }
+
+        function updateUI() {
+            scoreDisplay.innerText = score;
+            heartsDisplay.innerText = "❤️".repeat(lives) + "🖤".repeat(Math.max(0, 3 - lives));
+            scoreBox.classList.add('score-pop');
+            setTimeout(() => scoreBox.classList.remove('score-pop'), 200);
+        }
+
+        function resetGame() {
+            score = 0; lives = 3; items = [];
+            spawnTime = 1200; speed = 3.5; lastMilestone = 0;
+            active = true;
+            modal.classList.add('hidden');
+            updateUI();
+            requestAnimationFrame(gameLoop);
+        }
+
+        function endGame(win) {
+            active = false;
+            document.getElementById('modal-title').innerText = win ? "PRO BARKER!" : "GAME OVER";
+            document.getElementById('modal-title').style.color = win ? "#FF99AC" : "#5E3023";
+            document.getElementById('modal-msg').innerText = win ? "You caught all 100 treats!" : "Bugs got the treats!";
+            document.getElementById('final-score').innerText = score;
+            modal.classList.remove('hidden');
+        }
+
+        function movePlayer(e) {
+            if (!active) return;
+            const x = e.touches ? e.touches[0].clientX : e.clientX;
+            playerX = Math.max(60, Math.min(canvas.width - 60, x));
+        }
+
+        window.addEventListener('mousemove', movePlayer);
+        window.addEventListener('touchmove', (e) => { e.preventDefault(); movePlayer(e); }, {passive: false});
+        
+        // Start game
+        requestAnimationFrame(gameLoop);
+    </script>
+</body>
+</html>
