@@ -5,8 +5,13 @@ import {
   X, 
   ChevronRight, 
   Star, 
+  Instagram, 
+  Facebook, 
   Heart, 
   Gamepad2,
+  Truck,
+  Utensils,
+  Gift,
   Trophy,
   UserCircle,
   Sparkles,
@@ -19,14 +24,12 @@ import {
   Trash2,
   Lock,
   Unlock,
+  Image as ImageIcon,
   Upload,
-  Link as LinkIcon,
-  Home
+  Link as LinkIcon
 } from 'lucide-react';
 
-// --- Constants ---
-const TREATS = ['🧁', '🍪', '🍩', '🍰', '🥐', '🥯'];
-const BUGS = ['🪲', '🪳', '🦟', '🕷️'];
+// --- Initial Data ---
 const INITIAL_PRODUCTS = [
   {
     id: 1,
@@ -43,633 +46,584 @@ const INITIAL_PRODUCTS = [
     price: 18.50,
     category: "Loaves & Cakes",
     image: "https://images.unsplash.com/photo-1586985289906-40698897d504?auto=format&fit=crop&q=80&w=400"
+  },
+  {
+    id: 3,
+    name: "Pug-kin Spice Muffins",
+    description: "Chunky, cozy pumpkin spice muffins with a cream cheese swirl center.",
+    price: 15.00,
+    category: "Breakfast Treats",
+    image: "https://images.unsplash.com/photo-1558401391-7899b4bd5bbf?auto=format&fit=crop&q=80&w=400"
   }
 ];
 
-// --- Game Component (Canvas Based) ---
-const PastryPupGame = ({ onExit }) => {
-  const canvasRef = useRef(null);
-  const [gameState, setGameState] = useState('playing'); // playing, won, lost
-  const [score, setScore] = useState(0);
-  const [lives, setLives] = useState(3);
-  const [finalScore, setFinalScore] = useState(0);
+// --- Cart Drawer Component ---
+const CartDrawer = ({ isOpen, onClose, cartItems, onRemove }) => {
+  const total = cartItems.reduce((sum, item) => sum + item.price, 0);
 
-  // Game Logic Refs (to avoid React render cycle overhead)
-  const gameRef = useRef({
-    active: true,
-    playerX: window.innerWidth / 2,
-    items: [],
-    lastSpawn: 0,
-    spawnTime: 1200,
-    speed: 3.5,
-    lastMilestone: 0,
-    score: 0,
-    lives: 3
-  });
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    const ctx = canvas.getContext('2d');
-    
-    const handleResize = () => {
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
-    };
-    window.addEventListener('resize', handleResize);
-    handleResize();
-
-    class Item {
-      constructor() {
-        this.r = 25;
-        this.x = this.r + Math.random() * (canvas.width - this.r * 2);
-        this.y = -50;
-        this.v = gameRef.current.speed + Math.random() * (gameRef.current.speed * 0.4);
-        this.rot = Math.random() * Math.PI * 2;
-        this.rv = (Math.random() - 0.5) * 0.1;
-        const bugChance = 0.2 + (gameRef.current.score / 350);
-        this.isBug = Math.random() < Math.min(bugChance, 0.45);
-        this.emoji = this.isBug ? BUGS[Math.floor(Math.random() * BUGS.length)] : TREATS[Math.floor(Math.random() * TREATS.length)];
-      }
-      update() { this.y += this.v; this.rot += this.rv; }
-      draw(ctx) {
-        ctx.save();
-        ctx.translate(this.x, this.y);
-        ctx.rotate(this.rot);
-        ctx.font = "40px Arial";
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-        ctx.fillText(this.emoji, 0, 0);
-        ctx.restore();
-      }
-    }
-
-    const drawPlayer = (ctx, x) => {
-      const yPos = canvas.height - 110;
-      ctx.save();
-      ctx.translate(x, yPos);
-      
-      // Ears
-      ctx.fillStyle = "#d4a373";
-      ctx.strokeStyle = "#5E3023";
-      ctx.lineWidth = 2;
-      ctx.beginPath(); ctx.ellipse(-50, -10, 25, 45, Math.PI / 8, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-      ctx.beginPath(); ctx.ellipse(50, -10, 25, 45, -Math.PI / 8, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-      
-      // Head
-      ctx.fillStyle = "#f3d5b5";
-      ctx.beginPath(); ctx.roundRect(-45, -40, 90, 80, 40); ctx.fill(); ctx.stroke();
-      
-      // Details
-      ctx.fillStyle = "white";
-      ctx.beginPath(); ctx.ellipse(0, -25, 12, 30, 0, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = "#333";
-      ctx.beginPath(); ctx.arc(-22, -12, 6, 0, Math.PI * 2); ctx.fill(); 
-      ctx.beginPath(); ctx.arc(22, -12, 6, 0, Math.PI * 2); ctx.fill(); 
-      ctx.fillStyle = "#5E3023";
-      ctx.beginPath(); ctx.arc(0, 10, 6, 0, Math.PI * 2); ctx.fill();
-      
-      // Paws
-      ctx.fillStyle = "white";
-      ctx.beginPath(); ctx.arc(-35, 45, 12, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-      ctx.beginPath(); ctx.arc(35, 45, 12, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-      
-      ctx.restore();
-    };
-
-    let animationFrame;
-    const loop = (t) => {
-      if (!gameRef.current.active) return;
-      
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      
-      // Spawn items
-      if (t - gameRef.current.lastSpawn > gameRef.current.spawnTime) {
-        gameRef.current.items.push(new Item());
-        gameRef.current.lastSpawn = t;
-      }
-
-      drawPlayer(ctx, gameRef.current.playerX);
-
-      const playerY = canvas.height - 110;
-      for (let i = gameRef.current.items.length - 1; i >= 0; i--) {
-        const it = gameRef.current.items[i];
-        it.update();
-        it.draw(ctx);
-
-        // Collision
-        const dx = Math.abs(it.x - gameRef.current.playerX);
-        const dy = Math.abs(it.y - playerY);
-        if (dx < 60 && dy < 50) {
-          if (it.isBug) {
-            gameRef.current.lives--;
-            setLives(gameRef.current.lives);
-            if (gameRef.current.lives <= 0) {
-              endGame(false);
-            }
-          } else {
-            gameRef.current.score++;
-            setScore(gameRef.current.score);
-            if (gameRef.current.score >= 100) endGame(true);
-            else if (gameRef.current.score % 10 === 0 && gameRef.current.score !== gameRef.current.lastMilestone) {
-              gameRef.current.lastMilestone = gameRef.current.score;
-              gameRef.current.speed += 0.8;
-              gameRef.current.spawnTime = Math.max(400, gameRef.current.spawnTime - 100);
-            }
-          }
-          gameRef.current.items.splice(i, 1);
-          continue;
-        }
-
-        if (it.y > canvas.height + 50) {
-          gameRef.current.items.splice(i, 1);
-        }
-      }
-
-      animationFrame = requestAnimationFrame(loop);
-    };
-
-    const endGame = (win) => {
-      gameRef.current.active = false;
-      setFinalScore(gameRef.current.score);
-      setGameState(win ? 'won' : 'lost');
-    };
-
-    const handleMove = (e) => {
-      const x = e.touches ? e.touches[0].clientX : e.clientX;
-      gameRef.current.playerX = Math.max(60, Math.min(canvas.width - 60, x));
-    };
-
-    window.addEventListener('mousemove', handleMove);
-    window.addEventListener('touchmove', handleMove, { passive: false });
-    animationFrame = requestAnimationFrame(loop);
-
-    return () => {
-      gameRef.current.active = false;
-      cancelAnimationFrame(animationFrame);
-      window.removeEventListener('resize', handleResize);
-      window.removeEventListener('mousemove', handleMove);
-      window.removeEventListener('touchmove', handleMove);
-    };
-  }, []);
-
-  const resetGame = () => {
-    gameRef.current = {
-      active: true,
-      playerX: window.innerWidth / 2,
-      items: [],
-      lastSpawn: performance.now(),
-      spawnTime: 1200,
-      speed: 3.5,
-      lastMilestone: 0,
-      score: 0,
-      lives: 3
-    };
-    setScore(0);
-    setLives(3);
-    setGameState('playing');
-  };
+  if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-orange-50 z-[200] overflow-hidden flex flex-col">
-      {/* HUD */}
-      <div className="absolute top-6 left-6 right-6 flex justify-between items-center pointer-events-none z-10">
-        <div className="text-2xl font-black bg-white/90 px-6 py-3 rounded-full shadow-xl border-2 border-orange-200">
-          TREATS: <span className="text-orange-500">{score}</span>
-          <span className="text-xs opacity-30 ml-1">/100</span>
-        </div>
-        <div className="flex gap-2 text-3xl bg-white/90 px-4 py-2 rounded-full shadow-lg border-2 border-pink-100">
-          {Array.from({ length: 3 }).map((_, i) => (
-            <span key={i} className={i < lives ? "opacity-100" : "opacity-20 grayscale"}>❤️</span>
-          ))}
-        </div>
-      </div>
+    <div className="fixed inset-0 z-[110] overflow-hidden">
+      <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={onClose} />
+      <div className="absolute inset-y-0 right-0 max-w-full flex">
+        <div className="w-screen max-w-md bg-white shadow-2xl flex flex-col">
+          <div className="p-6 border-b flex items-center justify-between bg-pink-50">
+            <h2 className="text-xl font-black flex items-center gap-2">
+              <ShoppingBag className="text-pink-500" /> Your Treats
+            </h2>
+            <button onClick={onClose} className="p-2 hover:bg-white rounded-full transition-colors"><X /></button>
+          </div>
 
-      <canvas ref={canvasRef} className="flex-1 cursor-none touch-none bg-gradient-to-b from-orange-50 to-white" />
+          <div className="flex-1 overflow-y-auto p-6">
+            {cartItems.length === 0 ? (
+              <div className="h-full flex flex-col items-center justify-center text-slate-400 space-y-4">
+                <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center">
+                  <ShoppingBag size={32} />
+                </div>
+                <p className="font-medium">Your cart is empty!</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {cartItems.map((item, index) => (
+                  <div key={`${item.id}-${index}`} className="flex gap-4 p-3 bg-slate-50 rounded-2xl border border-slate-100 relative group">
+                    <img src={item.image} className="w-16 h-16 rounded-xl object-cover" alt={item.name} />
+                    <div className="flex-1 min-w-0">
+                      <p className="font-bold text-slate-800 text-sm truncate">{item.name}</p>
+                      <p className="text-pink-500 font-bold text-sm">${item.price.toFixed(2)}</p>
+                    </div>
+                    <button 
+                      onClick={() => onRemove(index)}
+                      className="p-1.5 text-slate-300 hover:text-red-500 transition-colors"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
 
-      {/* Game Over / Win Modals */}
-      {gameState !== 'playing' && (
-        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-md flex items-center justify-center p-6 z-50">
-          <div className="bg-white rounded-[3rem] p-10 w-full max-w-sm text-center shadow-2xl animate-in zoom-in-95 duration-300">
-             <div className="w-20 h-20 bg-orange-100 rounded-full flex items-center justify-center text-orange-500 mx-auto mb-6">
-                {gameState === 'won' ? <Trophy size={40} /> : <Gamepad2 size={40} />}
-             </div>
-             <h2 className={`text-4xl font-black mb-2 ${gameState === 'won' ? 'text-pink-500' : 'text-slate-800'}`}>
-               {gameState === 'won' ? "PRO BARKER!" : "GAME OVER"}
-             </h2>
-             <p className="text-slate-500 mb-8">
-               {gameState === 'won' ? "You caught all 100 treats!" : "The bugs got to the pastries first!"}
-             </p>
-             
-             <div className="bg-orange-50 rounded-3xl p-6 mb-8 border-2 border-orange-100">
-                <span className="block text-[10px] uppercase font-black tracking-[0.2em] text-orange-400 mb-1">Final Score</span>
-                <span className="text-6xl font-black text-slate-800">{finalScore}</span>
-             </div>
-
-             <div className="flex flex-col gap-3">
-               <button onClick={resetGame} className="py-4 bg-pink-500 text-white rounded-2xl font-bold text-lg shadow-lg hover:bg-pink-600 transition-all">
-                 PLAY AGAIN
-               </button>
-               <button onClick={onExit} className="py-3 text-slate-400 font-bold uppercase text-xs tracking-widest hover:text-slate-600">
-                 Back to Bakery
-               </button>
-             </div>
+          <div className="p-6 border-t bg-slate-50">
+            <div className="flex justify-between items-center mb-6">
+              <span className="text-slate-500 font-medium">Subtotal</span>
+              <span className="text-2xl font-black text-slate-900">${total.toFixed(2)}</span>
+            </div>
+            <button 
+              disabled={cartItems.length === 0}
+              className="w-full py-4 bg-pink-500 text-white rounded-2xl font-bold shadow-lg shadow-pink-100 hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-50 disabled:hover:scale-100"
+            >
+              Checkout Now
+            </button>
+            <p className="text-center text-[10px] text-slate-400 mt-4 uppercase tracking-widest font-bold">Lucy's Bakery • Handmade with Love</p>
           </div>
         </div>
-      )}
-
-      {/* Mobile Exit */}
-      <button onClick={onExit} className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-white/50 backdrop-blur p-4 rounded-full text-slate-400 hover:text-slate-800 md:hidden">
-        <X size={24} />
-      </button>
+      </div>
     </div>
   );
 };
 
-// --- Main App Component ---
-export default function App() {
-  const [currentPage, setCurrentPage] = useState('home'); // home, arcade, portal
-  const [products, setProducts] = useState(INITIAL_PRODUCTS);
-  const [cart, setCart] = useState([]);
-  const [isCartOpen, setIsCartOpen] = useState(false);
-  const [activeCategory, setActiveCategory] = useState("All");
+// --- Mini-Game Component ---
+const CatchTheTreat = () => {
+  const [score, setScore] = useState(0);
+  const [basketPos, setBasketPos] = useState(50);
+  const [treats, setTreats] = useState([]);
+  const [gameActive, setGameActive] = useState(false);
 
-  // Portal States
-  const [portalPass, setPortalPass] = useState('');
-  const [isAuthed, setIsAuthed] = useState(false);
-  const [portalForm, setPortalForm] = useState({ name: '', description: '', price: '', category: 'Signature Sweets', image: '' });
+  const startGame = () => {
+    setScore(0);
+    setTreats([]);
+    setGameActive(true);
+  };
+
+  useEffect(() => {
+    if (!gameActive) return;
+    const interval = setInterval(() => {
+      setTreats(prev => [...prev, { id: Math.random(), x: Math.random() * 90, y: 0 }]);
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [gameActive]);
+
+  useEffect(() => {
+    if (!gameActive) return;
+    const moveInterval = setInterval(() => {
+      setTreats(prev => {
+        const next = prev.map(t => ({ ...t, y: t.y + 2 }));
+        const caught = next.filter(t => t.y > 80 && t.y < 90 && Math.abs(t.x - basketPos) < 10);
+        if (caught.length > 0) setScore(s => s + 1);
+        return next.filter(t => t.y < 100 && !caught.includes(t));
+      });
+    }, 20);
+    return () => clearInterval(moveInterval);
+  }, [gameActive, basketPos]);
+
+  return (
+    <div className="bg-slate-900 rounded-3xl p-6 text-white overflow-hidden relative h-[400px]" 
+         onMouseMove={(e) => {
+           const rect = e.currentTarget.getBoundingClientRect();
+           setBasketPos(((e.clientX - rect.left) / rect.width) * 100);
+         }}>
+      {!gameActive ? (
+        <div className="h-full flex flex-col items-center justify-center space-y-4">
+          <Gamepad2 size={48} className="text-pink-500 animate-bounce" />
+          <h3 className="text-2xl font-bold">Catch the Treats!</h3>
+          <p className="text-slate-400">Move your mouse to catch falling cookies.</p>
+          <button onClick={startGame} className="px-6 py-2 bg-pink-500 rounded-full font-bold">Start Game</button>
+        </div>
+      ) : (
+        <>
+          <div className="absolute top-4 left-4 text-xl font-bold">Score: {score}</div>
+          {treats.map(t => (
+            <div key={t.id} className="absolute text-2xl" style={{ left: `${t.x}%`, top: `${t.y}%` }}>🍪</div>
+          ))}
+          <div className="absolute bottom-4 text-4xl" style={{ left: `${basketPos}%`, transform: 'translateX(-50%)' }}>🐶</div>
+          <button onClick={() => setGameActive(false)} className="absolute top-4 right-4 text-xs text-slate-500">Quit</button>
+        </>
+      )}
+    </div>
+  );
+};
+
+// --- Manager Portal Modal with Password Lock ---
+const BakerPortal = ({ isOpen, onClose, products, onAdd, onDelete }) => {
+  const [form, setForm] = useState({ 
+    name: '', 
+    description: '', 
+    price: '', 
+    category: 'Signature Sweets',
+    image: '' 
+  });
+  const [passwordInput, setPasswordInput] = useState('');
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [error, setError] = useState('');
+  const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef(null);
 
-  const handleFileUpload = (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => setPortalForm({ ...portalForm, image: reader.result });
-      reader.readAsDataURL(file);
+  const CORRECT_PASSWORD = 'pickles!';
+
+  useEffect(() => {
+    if (!isOpen) {
+      setIsAuthenticated(false);
+      setPasswordInput('');
+      setError('');
+    }
+  }, [isOpen]);
+
+  const handleAuth = (e) => {
+    e.preventDefault();
+    if (passwordInput === CORRECT_PASSWORD) {
+      setIsAuthenticated(true);
+      setError('');
+    } else {
+      setError('Wrong password! Try again.');
     }
   };
 
-  const handleAddProduct = (e) => {
-    e.preventDefault();
-    const newProd = { ...portalForm, id: Date.now(), price: parseFloat(portalForm.price) };
-    setProducts([newProd, ...products]);
-    setPortalForm({ name: '', description: '', price: '', category: 'Signature Sweets', image: '' });
+  const handleFileUpload = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    setUploading(true);
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setForm(prev => ({ ...prev, image: reader.result }));
+      setUploading(false);
+    };
+    reader.readAsDataURL(file);
   };
 
-  if (currentPage === 'arcade') {
-    return <PastryPupGame onExit={() => setCurrentPage('home')} />;
-  }
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    onAdd({
+      ...form,
+      id: Date.now(),
+      price: parseFloat(form.price),
+      image: form.image || "https://images.unsplash.com/photo-1558961363-fa8fdf82db35?auto=format&fit=crop&q=80&w=400"
+    });
+    setForm({ name: '', description: '', price: '', category: 'Signature Sweets', image: '' });
+  };
+
+  if (!isOpen) return null;
 
   return (
-    <div className="min-h-screen bg-white text-slate-900 selection:bg-pink-100 selection:text-pink-600">
-      {/* Navigation */}
-      <nav className="fixed top-0 w-full bg-white/90 backdrop-blur-md z-[100] border-b border-orange-50 h-20 px-6">
-        <div className="max-w-7xl mx-auto h-full flex items-center justify-between">
-          <div onClick={() => setCurrentPage('home')} className="flex items-center gap-2 cursor-pointer">
-            <div className="w-10 h-10 bg-pink-500 rounded-full flex items-center justify-center text-white font-black shadow-lg">P</div>
-            <span className="text-2xl font-black tracking-tight">Pastry Pup</span>
-          </div>
-          
-          <div className="hidden md:flex items-center gap-10">
-            <button onClick={() => setCurrentPage('home')} className={`font-bold transition-colors ${currentPage === 'home' ? 'text-pink-500' : 'text-slate-400 hover:text-slate-900'}`}>Bakery</button>
-            <button onClick={() => setCurrentPage('arcade')} className="font-bold text-slate-400 hover:text-slate-900 flex items-center gap-2">
-              <Gamepad2 size={18} /> Arcade
-            </button>
-            <button onClick={() => setCurrentPage('portal')} className={`font-bold transition-colors ${currentPage === 'portal' ? 'text-pink-500' : 'text-slate-400 hover:text-slate-900'}`}>Baker's Portal</button>
-          </div>
+    <div className="fixed inset-0 z-[120] flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-slate-900/80 backdrop-blur-md" onClick={onClose} />
+      <div className="relative bg-white w-full max-w-5xl max-h-[90vh] rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col">
+        <div className="p-6 border-b flex justify-between items-center bg-pink-50">
+          <h2 className="text-2xl font-black text-slate-900 flex items-center gap-2">
+            <Settings className="text-pink-500" /> Baker's Portal
+          </h2>
+          <button onClick={onClose} className="p-2 hover:bg-white rounded-full transition-colors"><X /></button>
+        </div>
 
-          <div className="flex items-center gap-4">
-            <button onClick={() => setIsCartOpen(true)} className="relative p-2 bg-orange-50 rounded-full text-slate-700 hover:bg-pink-50 transition-colors">
-              <ShoppingBag size={22} />
-              {cart.length > 0 && <span className="absolute -top-1 -right-1 bg-pink-500 text-white text-[10px] w-5 h-5 rounded-full flex items-center justify-center border-2 border-white font-black">{cart.length}</span>}
+        {!isAuthenticated ? (
+          <div className="flex-1 flex flex-col items-center justify-center p-12 space-y-6 text-center">
+            <div className="w-20 h-20 bg-pink-100 rounded-full flex items-center justify-center text-pink-500 mb-2">
+              <Lock size={40} />
+            </div>
+            <div>
+              <h3 className="text-2xl font-black">Private Kitchen Access</h3>
+              <p className="text-slate-500">Only Lucy and her team can enter here!</p>
+            </div>
+            <form onSubmit={handleAuth} className="w-full max-w-xs space-y-3">
+              <input 
+                type="password" 
+                autoFocus
+                placeholder="Enter password" 
+                className={`w-full p-4 bg-slate-100 rounded-2xl text-center font-bold focus:ring-2 outline-none transition-all ${error ? 'ring-2 ring-red-400' : 'focus:ring-pink-300'}`}
+                value={passwordInput}
+                onChange={e => setPasswordInput(e.target.value)}
+              />
+              {error && <p className="text-red-500 text-xs font-bold">{error}</p>}
+              <button className="w-full py-4 bg-slate-900 text-white rounded-2xl font-bold shadow-lg flex items-center justify-center gap-2 hover:bg-slate-800 transition-colors">
+                <Unlock size={18} /> Unlock Portal
+              </button>
+            </form>
+          </div>
+        ) : (
+          <div className="flex-1 overflow-y-auto p-8 grid lg:grid-cols-2 gap-12">
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <h3 className="text-xl font-bold flex items-center gap-2 mb-4">
+                <Plus size={24} className="text-pink-500" /> New Treat Details
+              </h3>
+              
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-slate-400 uppercase ml-1">Name</label>
+                <input required placeholder="e.g. Beagle Bagels" className="w-full p-3 bg-slate-50 rounded-xl border border-transparent focus:border-pink-200 outline-none" value={form.name} onChange={e => setForm({...form, name: e.target.value})} />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-400 uppercase ml-1">Price ($)</label>
+                  <input required type="number" step="0.01" placeholder="0.00" className="w-full p-3 bg-slate-50 rounded-xl border border-transparent focus:border-pink-200 outline-none" value={form.price} onChange={e => setForm({...form, price: e.target.value})} />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-400 uppercase ml-1">Category</label>
+                  <select className="w-full p-3 bg-slate-50 rounded-xl border border-transparent focus:border-pink-200 outline-none" value={form.category} onChange={e => setForm({...form, category: e.target.value})}>
+                    <option>Signature Sweets</option>
+                    <option>Loaves & Cakes</option>
+                    <option>Breakfast Treats</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-slate-400 uppercase ml-1">Treat Picture</label>
+                <div className="flex gap-2">
+                  <button 
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="flex-1 p-3 bg-slate-100 rounded-xl border-2 border-dashed border-slate-300 hover:border-pink-400 hover:bg-pink-50 transition-all flex items-center justify-center gap-2 text-slate-600 font-bold text-sm"
+                  >
+                    <Upload size={18} /> {uploading ? 'Uploading...' : 'Upload Photo'}
+                  </button>
+                  <div className="flex-[1.5] relative">
+                    <LinkIcon size={16} className="absolute left-3 top-3.5 text-slate-400" />
+                    <input 
+                      placeholder="...or paste image URL" 
+                      className="w-full p-3 pl-10 bg-slate-50 rounded-xl border border-transparent focus:border-pink-200 outline-none text-sm" 
+                      value={form.image.startsWith('data:') ? '' : form.image} 
+                      onChange={e => setForm({...form, image: e.target.value})} 
+                    />
+                  </div>
+                </div>
+                <input 
+                  type="file" 
+                  ref={fileInputRef} 
+                  className="hidden" 
+                  accept="image/*" 
+                  onChange={handleFileUpload}
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-slate-400 uppercase ml-1">Description</label>
+                <textarea required placeholder="What makes this treat special?" className="w-full p-3 bg-slate-50 rounded-xl h-24 border border-transparent focus:border-pink-200 outline-none resize-none" value={form.description} onChange={e => setForm({...form, description: e.target.value})} />
+              </div>
+
+              <div className="pt-2">
+                <button className="w-full py-4 bg-pink-500 text-white rounded-2xl font-bold shadow-lg shadow-pink-100 hover:scale-[1.01] transition-transform flex items-center justify-center gap-2">
+                  <Plus size={20} /> Add to Menu
+                </button>
+              </div>
+
+              {form.image && (
+                <div className="mt-4 p-4 bg-slate-50 rounded-2xl border border-dashed border-slate-200 relative group">
+                  <p className="text-[10px] font-bold text-slate-400 uppercase mb-2">Image Preview</p>
+                  <img src={form.image} className="w-full h-32 object-cover rounded-xl shadow-inner" alt="Preview" onError={(e) => e.target.src = 'https://via.placeholder.com/400x200?text=Invalid+Image+URL'} />
+                  <button 
+                    type="button" 
+                    onClick={() => setForm({...form, image: ''})}
+                    className="absolute top-6 right-6 p-1.5 bg-red-500 text-white rounded-full shadow-lg opacity-0 group-hover:opacity-100 transition-opacity"
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+              )}
+            </form>
+
+            <div className="space-y-4">
+              <div className="flex items-center justify-between sticky top-0 bg-white py-2 z-10">
+                <h3 className="text-xl font-bold">Kitchen Inventory</h3>
+                <span className="text-[10px] bg-green-100 text-green-700 px-3 py-1 rounded-full font-black tracking-widest uppercase">Live Menu</span>
+              </div>
+              <div className="space-y-3 overflow-y-auto pr-2">
+                {products.length === 0 ? (
+                  <p className="text-slate-400 italic text-center py-10">The bakery is empty! Add some treats.</p>
+                ) : (
+                  products.map(p => (
+                    <div key={p.id} className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100 group hover:border-pink-200 transition-all hover:shadow-sm">
+                      <div className="flex items-center gap-4">
+                        <img src={p.image} className="w-14 h-14 rounded-xl object-cover shadow-sm ring-2 ring-white" alt="" />
+                        <div>
+                          <p className="font-black text-slate-800 leading-tight">{p.name}</p>
+                          <p className="text-pink-500 font-bold text-sm">${p.price.toFixed(2)}</p>
+                        </div>
+                      </div>
+                      <button 
+                        onClick={() => onDelete(p.id)} 
+                        className="p-3 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"
+                        title="Delete Treat"
+                      >
+                        <Trash2 size={20} />
+                      </button>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+export default function App() {
+  const [cart, setCart] = useState([]);
+  const [isCartOpen, setIsCartOpen] = useState(false);
+  const [isPortalOpen, setIsPortalOpen] = useState(false);
+  const [activeCategory, setActiveCategory] = useState("All");
+  const [products, setProducts] = useState(INITIAL_PRODUCTS);
+
+  const addToCart = (product) => {
+    setCart([...cart, product]);
+    setIsCartOpen(true);
+  };
+
+  const removeFromCart = (index) => {
+    const newCart = [...cart];
+    newCart.splice(index, 1);
+    setCart(newCart);
+  };
+
+  return (
+    <div className="min-h-screen bg-white font-sans text-slate-900">
+      {/* Navbar */}
+      <nav className="fixed top-0 w-full bg-white/90 backdrop-blur-md z-50 border-b border-pink-100">
+        <div className="max-w-7xl mx-auto px-4 h-20 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="w-10 h-10 bg-pink-500 rounded-full flex items-center justify-center text-white font-bold text-xl shadow-lg shadow-pink-200">P</div>
+            <span className="text-2xl font-bold text-slate-800 tracking-tight">Pastry Pup</span>
+          </div>
+          <div className="hidden md:flex items-center gap-8 font-medium text-slate-600">
+            <a href="#shop" className="hover:text-pink-500 transition-colors font-bold">Bakery</a>
+            <a href="#trivia" className="hover:text-pink-500 transition-colors font-bold">Trivia & Games</a>
+            <a href="#about" className="hover:text-pink-500 transition-colors font-bold">Our Story</a>
+            <button onClick={() => setIsPortalOpen(true)} className="flex items-center gap-1.5 text-pink-500 hover:text-pink-600 font-black border-l pl-8 border-slate-100">
+              <Lock size={16} /> Portal
             </button>
           </div>
+          <button onClick={() => setIsCartOpen(true)} className="relative p-2 text-slate-700 hover:bg-pink-50 rounded-full transition-all">
+            <ShoppingBag size={24} />
+            {cart.length > 0 && (
+              <span className="absolute top-0 right-0 bg-pink-500 text-white text-[10px] w-5 h-5 rounded-full flex items-center justify-center border-2 border-white font-bold">{cart.length}</span>
+            )}
+          </button>
         </div>
       </nav>
 
-      {currentPage === 'home' ? (
-        <main className="pt-20">
-          {/* Hero */}
-          <header className="relative py-24 px-6 overflow-hidden">
-            <div className="max-w-7xl mx-auto grid lg:grid-cols-2 gap-16 items-center">
-              <div className="space-y-8 relative z-10">
-                <div className="inline-flex items-center gap-2 px-4 py-1.5 bg-pink-50 text-pink-600 rounded-full text-xs font-black uppercase tracking-widest">
-                  <Star size={14} /> New! Puppy Paws Shortbread
-                </div>
-                <h1 className="text-6xl md:text-8xl font-black leading-[0.9]">
-                  Barking <br/><span className="text-pink-500">Delicious</span>.
-                </h1>
-                <p className="text-xl text-slate-500 max-w-md leading-relaxed">
-                  The world's first human-only bakery inspired by the whimsical world of puppies. Founded by Lucy.
-                </p>
-                <div className="flex flex-wrap gap-4 pt-4">
-                  <button onClick={() => {
-                    document.getElementById('bakery-menu').scrollIntoView({ behavior: 'smooth' });
-                  }} className="px-10 py-5 bg-slate-900 text-white rounded-[2rem] font-black text-lg hover:scale-105 transition-transform shadow-2xl">
-                    Shop the Menu
-                  </button>
-                  <button onClick={() => setCurrentPage('arcade')} className="px-10 py-5 bg-white border-4 border-orange-100 text-slate-900 rounded-[2rem] font-black text-lg hover:border-pink-200 transition-all flex items-center gap-3">
-                    <Gamepad2 /> Play Arcade
-                  </button>
-                </div>
-              </div>
-              <div className="relative">
-                <div className="absolute -top-10 -right-10 w-64 h-64 bg-pink-100 rounded-full blur-3xl opacity-50" />
-                <img src="https://images.unsplash.com/photo-1558961363-fa8fdf82db35?auto=format&fit=crop&q=80&w=800" className="rounded-[3rem] shadow-2xl w-full aspect-square object-cover" alt="Pastries" />
-              </div>
+      {/* Hero Section */}
+      <section className="pt-32 pb-20 px-4 bg-gradient-to-b from-orange-50 to-white">
+        <div className="max-w-7xl mx-auto grid md:grid-cols-2 gap-12 items-center">
+          <div className="space-y-6">
+            <div className="inline-block px-4 py-1.5 bg-orange-100 text-orange-700 rounded-full text-sm font-semibold tracking-wide uppercase">
+              Founder: Lucy • Handmade for Humans
             </div>
-          </header>
-
-          {/* Menu Section */}
-          <section id="bakery-menu" className="py-24 px-6 bg-slate-50/50">
-            <div className="max-w-7xl mx-auto">
-              <div className="flex flex-col md:flex-row md:items-end justify-between mb-12 gap-8">
-                <div>
-                  <h2 className="text-4xl font-black mb-4">Fresh from the Oven</h2>
-                  <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar">
-                    {["All", "Signature Sweets", "Loaves & Cakes", "Breakfast Treats"].map(cat => (
-                      <button 
-                        key={cat} 
-                        onClick={() => setActiveCategory(cat)}
-                        className={`px-6 py-2 rounded-full font-bold whitespace-nowrap transition-all ${activeCategory === cat ? 'bg-pink-500 text-white shadow-lg' : 'bg-white border border-slate-200 text-slate-500 hover:border-pink-200'}`}
-                      >
-                        {cat}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                <div className="hidden md:block text-right text-slate-400 font-bold text-xs uppercase tracking-widest">
-                  Baking Daily in the Pastry Pup Kitchen
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-10">
-                {products.filter(p => activeCategory === "All" || p.category === activeCategory).map(product => (
-                  <div key={product.id} className="group bg-white p-4 rounded-[2.5rem] border border-slate-100 hover:border-pink-100 transition-all hover:shadow-2xl hover:shadow-pink-50">
-                    <div className="relative aspect-[4/3] overflow-hidden rounded-[2rem] mb-6">
-                      <img src={product.image} className="w-full h-full object-cover transition-transform group-hover:scale-110 duration-700" alt="" />
-                      <button 
-                        onClick={() => {
-                          setCart([...cart, product]);
-                          setIsCartOpen(true);
-                        }}
-                        className="absolute bottom-4 right-4 bg-white p-4 rounded-2xl shadow-xl text-pink-500 opacity-0 group-hover:opacity-100 translate-y-4 group-hover:translate-y-0 transition-all hover:bg-pink-500 hover:text-white"
-                      >
-                        <ShoppingBag size={20} />
-                      </button>
-                    </div>
-                    <div className="px-2">
-                      <span className="text-[10px] font-black text-orange-400 uppercase tracking-widest">{product.category}</span>
-                      <h3 className="text-2xl font-black mb-2 mt-1">{product.name}</h3>
-                      <p className="text-slate-400 text-sm line-clamp-2 leading-relaxed mb-4">{product.description}</p>
-                      <div className="flex items-center justify-between pt-4 border-t border-slate-50">
-                        <span className="text-2xl font-black">${product.price.toFixed(2)}</span>
-                        <div className="flex text-pink-400"><Star size={14} fill="currentColor"/><Star size={14} fill="currentColor"/><Star size={14} fill="currentColor"/><Star size={14} fill="currentColor"/><Star size={14} fill="currentColor"/></div>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
+            <h1 className="text-5xl md:text-7xl font-extrabold text-slate-900 leading-tight">
+              Baked for <span className="text-pink-500">Humans</span>,<br/> Inspired by <span className="text-orange-500 italic font-serif">Pups.</span>
+            </h1>
+            <p className="text-xl text-slate-600 max-w-lg">
+              Lucy's famous dog-themed treats for people. Whimsical, delicious, and 100% human-safe.
+            </p>
+            <div className="flex flex-wrap gap-4">
+              <a href="#shop" className="px-8 py-4 bg-slate-900 text-white rounded-2xl font-bold hover:bg-slate-800 transition-all flex items-center gap-2 shadow-lg">
+                Shop the Bakery <ChevronRight size={20} />
+              </a>
+              <a href="#trivia" className="px-8 py-4 bg-white border-2 border-slate-200 text-slate-900 rounded-2xl font-bold hover:border-pink-300 transition-all">
+                Play Arcade Games
+              </a>
             </div>
-          </section>
-
-          {/* About */}
-          <section className="py-24 px-6 max-w-7xl mx-auto">
-            <div className="grid lg:grid-cols-2 gap-20 items-center">
-              <div className="order-2 lg:order-1 relative">
-                <div className="absolute inset-0 bg-orange-100 rounded-[4rem] -rotate-3 -z-10" />
-                <img src="https://images.unsplash.com/photo-1513151233558-d860c5398176?auto=format&fit=crop&q=80&w=600" className="rounded-[4rem] shadow-xl w-full" alt="Kitchen" />
-                <div className="absolute -bottom-8 -right-8 bg-white p-8 rounded-3xl shadow-2xl border border-pink-50 max-w-xs">
-                  <p className="text-pink-500 font-black italic text-lg">"The best cookies I've ever shared with my human!"</p>
-                  <p className="text-slate-400 text-xs mt-2">— A very happy golden retriever</p>
-                </div>
-              </div>
-              <div className="order-1 lg:order-2 space-y-8">
-                <h2 className="text-5xl font-black">Our Story starts at <span className="text-pink-500">Dollarama</span>.</h2>
-                <div className="space-y-4 text-lg text-slate-500 leading-relaxed">
-                  <p>When Lucy saw a small business kit at Dollarama, she didn't just see a toy—she saw a vision. A vision of cookies that look like dog treats but taste like gourmet heaven.</p>
-                  <p>Built as a family project with <strong>Daddy and Artificial Intelligence</strong>, Pastry Pup is about more than just sweets. It's about bringing a little more playfulness to the world.</p>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="p-6 bg-slate-50 rounded-3xl text-center">
-                    <p className="text-3xl font-black text-slate-900">100%</p>
-                    <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1">Human Grade</p>
-                  </div>
-                  <div className="p-6 bg-slate-50 rounded-3xl text-center">
-                    <p className="text-3xl font-black text-slate-900">∞</p>
-                    <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1">Pup Inspired</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </section>
-        </main>
-      ) : (
-        /* Portal View */
-        <main className="pt-32 pb-24 px-6 max-w-4xl mx-auto">
-          {!isAuthed ? (
-            <div className="text-center space-y-8 py-20">
-               <div className="w-24 h-24 bg-pink-100 rounded-full flex items-center justify-center text-pink-500 mx-auto">
-                  <Lock size={48} />
-               </div>
-               <div>
-                  <h1 className="text-4xl font-black mb-2">Baker's Access</h1>
-                  <p className="text-slate-500">Only Lucy and authorized bakers can enter.</p>
-               </div>
-               <div className="max-w-xs mx-auto space-y-4">
-                  <input 
-                    type="password" 
-                    placeholder="Kitchen Password" 
-                    className="w-full p-5 bg-slate-100 rounded-2xl text-center font-bold focus:ring-4 ring-pink-100 transition-all outline-none"
-                    value={portalPass}
-                    onChange={e => setPortalPass(e.target.value)}
-                    onKeyDown={e => e.key === 'Enter' && portalPass === 'pickles!' && setIsAuthed(true)}
-                  />
-                  <button 
-                    onClick={() => portalPass === 'pickles!' ? setIsAuthed(true) : alert('Wrong whisk!')}
-                    className="w-full py-5 bg-slate-900 text-white rounded-2xl font-black hover:bg-slate-800 transition-all shadow-xl"
-                  >
-                    Enter Kitchen
-                  </button>
-               </div>
-            </div>
-          ) : (
-            <div className="space-y-12">
-               <div className="flex items-center justify-between">
-                  <h1 className="text-4xl font-black flex items-center gap-3">
-                     <Plus className="text-pink-500" /> New Pastry
-                  </h1>
-                  <button onClick={() => setIsAuthed(false)} className="px-4 py-2 text-slate-400 hover:text-slate-900 font-bold flex items-center gap-2">
-                    <Unlock size={16} /> Logout
-                  </button>
-               </div>
-
-               <form onSubmit={handleAddProduct} className="grid md:grid-cols-2 gap-10 bg-slate-50 p-10 rounded-[3rem] border border-slate-100">
-                  <div className="space-y-6">
-                    <div className="space-y-2">
-                       <label className="text-xs font-black uppercase tracking-widest text-slate-400 ml-1">Pastry Name</label>
-                       <input required placeholder="Beagle Bagel" className="w-full p-4 bg-white rounded-2xl border-2 border-transparent focus:border-pink-200 outline-none transition-all" value={portalForm.name} onChange={e => setPortalForm({...portalForm, name: e.target.value})} />
-                    </div>
-                    <div className="grid grid-cols-2 gap-4">
-                       <div className="space-y-2">
-                          <label className="text-xs font-black uppercase tracking-widest text-slate-400 ml-1">Price ($)</label>
-                          <input required type="number" step="0.01" placeholder="12.00" className="w-full p-4 bg-white rounded-2xl border-2 border-transparent focus:border-pink-200 outline-none transition-all" value={portalForm.price} onChange={e => setPortalForm({...portalForm, price: e.target.value})} />
-                       </div>
-                       <div className="space-y-2">
-                          <label className="text-xs font-black uppercase tracking-widest text-slate-400 ml-1">Category</label>
-                          <select className="w-full p-4 bg-white rounded-2xl border-2 border-transparent focus:border-pink-200 outline-none transition-all" value={portalForm.category} onChange={e => setPortalForm({...portalForm, category: e.target.value})}>
-                            <option>Signature Sweets</option>
-                            <option>Loaves & Cakes</option>
-                            <option>Breakfast Treats</option>
-                          </select>
-                       </div>
-                    </div>
-                    <div className="space-y-2">
-                       <label className="text-xs font-black uppercase tracking-widest text-slate-400 ml-1">Pastry Image</label>
-                       <div className="flex gap-2">
-                          <button type="button" onClick={() => fileInputRef.current?.click()} className="flex-1 p-4 bg-pink-50 text-pink-600 rounded-2xl border-2 border-dashed border-pink-200 font-bold text-sm flex items-center justify-center gap-2 hover:bg-pink-100 transition-colors">
-                            <Upload size={18} /> Upload Photo
-                          </button>
-                          <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleFileUpload} />
-                       </div>
-                    </div>
-                  </div>
-
-                  <div className="space-y-6">
-                    <div className="space-y-2">
-                       <label className="text-xs font-black uppercase tracking-widest text-slate-400 ml-1">Description</label>
-                       <textarea required placeholder="Buttery, flaky, and totally pawsome..." className="w-full h-32 p-4 bg-white rounded-2xl border-2 border-transparent focus:border-pink-200 outline-none transition-all resize-none" value={portalForm.description} onChange={e => setPortalForm({...portalForm, description: e.target.value})} />
-                    </div>
-                    
-                    <div className="h-40 bg-white rounded-[2rem] border-2 border-dashed border-slate-200 flex items-center justify-center overflow-hidden">
-                      {portalForm.image ? (
-                        <img src={portalForm.image} className="w-full h-full object-cover" alt="Preview" />
-                      ) : (
-                        <div className="text-center text-slate-300">
-                          <LinkIcon className="mx-auto mb-2" />
-                          <p className="text-[10px] font-black uppercase tracking-widest">Image Preview</p>
-                        </div>
-                      )}
-                    </div>
-
-                    <button className="w-full py-5 bg-pink-500 text-white rounded-2xl font-black text-lg shadow-xl shadow-pink-100 hover:scale-[1.02] active:scale-95 transition-all">
-                      Add to Menu
-                    </button>
-                  </div>
-               </form>
-
-               <div className="pt-10 space-y-6">
-                  <h2 className="text-2xl font-black">Live Inventory</h2>
-                  <div className="space-y-4">
-                    {products.map(p => (
-                      <div key={p.id} className="flex items-center justify-between p-4 bg-white rounded-3xl border border-slate-100 group hover:border-pink-100 transition-all">
-                        <div className="flex items-center gap-4">
-                          <img src={p.image} className="w-16 h-16 rounded-2xl object-cover" alt="" />
-                          <div>
-                            <p className="font-black text-slate-900">{p.name}</p>
-                            <p className="text-pink-500 font-bold">${p.price.toFixed(2)}</p>
-                          </div>
-                        </div>
-                        <button 
-                          onClick={() => setProducts(products.filter(item => item.id !== p.id))}
-                          className="p-4 text-slate-300 hover:text-red-500 transition-colors"
-                        >
-                          <Trash2 size={20} />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-               </div>
-            </div>
-          )}
-        </main>
-      )}
-
-      {/* Cart Drawer */}
-      {isCartOpen && (
-        <div className="fixed inset-0 z-[1000] overflow-hidden">
-          <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => setIsCartOpen(false)} />
-          <div className="absolute inset-y-0 right-0 w-full max-w-md bg-white shadow-2xl flex flex-col">
-            <div className="p-8 border-b flex items-center justify-between bg-orange-50">
-              <h2 className="text-2xl font-black">Your Basket</h2>
-              <button onClick={() => setIsCartOpen(false)} className="p-2 hover:bg-white rounded-full transition-colors"><X /></button>
-            </div>
-            <div className="flex-1 overflow-y-auto p-8 space-y-6">
-              {cart.length === 0 ? (
-                <div className="h-full flex flex-col items-center justify-center text-slate-300 text-center">
-                  <ShoppingBag size={64} className="mb-4 opacity-20" />
-                  <p className="font-bold">Your basket is empty!</p>
-                  <button onClick={() => setIsCartOpen(false)} className="mt-4 text-pink-500 font-black uppercase text-xs tracking-widest underline">Go Browsing</button>
-                </div>
-              ) : (
-                cart.map((item, i) => (
-                  <div key={i} className="flex gap-4">
-                    <img src={item.image} className="w-20 h-20 rounded-2xl object-cover" alt="" />
-                    <div className="flex-1 py-1">
-                      <p className="font-black text-slate-900">{item.name}</p>
-                      <p className="text-pink-500 font-bold">${item.price.toFixed(2)}</p>
-                      <button onClick={() => {
-                        const newCart = [...cart];
-                        newCart.splice(i, 1);
-                        setCart(newCart);
-                      }} className="text-[10px] font-black text-slate-400 hover:text-red-500 uppercase tracking-widest mt-2 transition-colors">Remove</button>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-            <div className="p-8 border-t bg-slate-50">
-              <div className="flex justify-between items-center mb-8">
-                <span className="text-slate-400 font-bold uppercase tracking-widest text-xs">Subtotal</span>
-                <span className="text-3xl font-black">${cart.reduce((s, i) => s + i.price, 0).toFixed(2)}</span>
-              </div>
-              <button className="w-full py-5 bg-pink-500 text-white rounded-[2rem] font-black text-lg shadow-xl shadow-pink-100 hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-50" disabled={cart.length === 0}>
-                Checkout
-              </button>
+          </div>
+          <div className="relative">
+            <img src="https://images.unsplash.com/photo-1495147466023-ac5c588e2e94?auto=format&fit=crop&q=80&w=600" alt="Gourmet Pastries" className="rounded-[2.5rem] shadow-2xl relative z-10 w-full object-cover aspect-[4/5]" />
+            <div className="absolute -bottom-6 -left-6 bg-white p-6 rounded-3xl shadow-xl z-20 flex items-center gap-4 border border-pink-50">
+              <div className="w-12 h-12 bg-pink-100 rounded-full flex items-center justify-center text-pink-600 font-bold text-xl">L</div>
+              <p className="text-sm font-bold text-slate-700">Founder Lucy<br/><span className="text-slate-400 font-normal underline decoration-pink-200">Chief Baker</span></p>
             </div>
           </div>
         </div>
-      )}
+      </section>
+
+      {/* Bakery Section */}
+      <section id="shop" className="py-24 px-4 max-w-7xl mx-auto">
+        <div className="mb-12 text-center md:text-left">
+          <h2 className="text-4xl font-black mb-4">Lucy's Bakery Menu</h2>
+          <p className="text-slate-500 mb-6">Explore our dog-inspired treats (for humans only!)</p>
+          <div className="flex gap-2 overflow-x-auto pb-4 justify-center md:justify-start">
+            {["All", "Signature Sweets", "Loaves & Cakes", "Breakfast Treats"].map(cat => (
+              <button key={cat} onClick={() => setActiveCategory(cat)} className={`px-6 py-2 rounded-full font-bold transition-all whitespace-nowrap ${activeCategory === cat ? 'bg-pink-500 text-white shadow-lg' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>{cat}</button>
+            ))}
+          </div>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-10">
+          {products.filter(p => activeCategory === "All" || p.category === activeCategory).map(product => (
+            <div key={product.id} className="group cursor-pointer">
+              <div className="relative aspect-square overflow-hidden rounded-[2.5rem] bg-slate-100 mb-6 shadow-sm border border-slate-50">
+                <img src={product.image} className="w-full h-full object-cover transition-transform group-hover:scale-110 duration-700" alt={product.name} />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+                <button 
+                  onClick={() => addToCart(product)} 
+                  className="absolute bottom-6 right-6 bg-white p-5 rounded-2xl shadow-xl opacity-0 group-hover:opacity-100 transition-all translate-y-4 group-hover:translate-y-0 text-pink-500 hover:bg-pink-500 hover:text-white"
+                >
+                  <ShoppingBag size={24} />
+                </button>
+              </div>
+              <p className="text-xs font-black text-orange-500 uppercase tracking-[0.2em] mb-2">{product.category}</p>
+              <h3 className="text-2xl font-black text-slate-900 group-hover:text-pink-500 transition-colors">{product.name}</h3>
+              <p className="text-slate-500 text-sm mt-2 line-clamp-2 leading-relaxed">{product.description}</p>
+              <p className="text-xl font-black mt-4 text-slate-900 bg-slate-50 inline-block px-3 py-1 rounded-lg border border-slate-100">${product.price.toFixed(2)}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* Arcade */}
+      <section id="trivia" className="bg-slate-50 py-24 px-4 overflow-hidden">
+        <div className="max-w-7xl mx-auto">
+          <div className="flex items-center gap-4 mb-12">
+            <div className="w-14 h-14 bg-slate-900 text-white rounded-2xl flex items-center justify-center"><Gamepad2 size={32} /></div>
+            <div>
+              <h2 className="text-4xl font-black">The Dog-House Arcade</h2>
+              <p className="text-slate-500">Wait for your cookies to bake and have some fun!</p>
+            </div>
+          </div>
+          <div className="grid lg:grid-cols-2 gap-8">
+            <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-100 flex flex-col justify-between">
+              <div>
+                <div className="inline-block px-3 py-1 bg-blue-100 text-blue-600 rounded-full text-xs font-bold uppercase mb-4">Web App</div>
+                <h3 className="text-3xl font-bold mb-4">Disney Persona Trivia</h3>
+                <p className="text-slate-600 mb-8 leading-relaxed">Which Disney character is actually your kindred spirit? Are you more of a Mickey, a Stitch, or a Goofy?</p>
+                <div className="space-y-4">
+                  <div className="flex items-center gap-3 text-slate-700 font-medium"><UserCircle className="text-blue-500" size={20}/> 10+ Disney Personas</div>
+                  <div className="flex items-center gap-3 text-slate-700 font-medium"><Trophy className="text-blue-500" size={20}/> Shareable Results</div>
+                </div>
+              </div>
+              <button className="w-full mt-10 py-4 bg-blue-500 text-white rounded-2xl font-bold hover:bg-blue-600 transition-all shadow-lg shadow-blue-100">Launch Trivia App</button>
+            </div>
+            <CatchTheTreat />
+          </div>
+        </div>
+      </section>
+
+      {/* Story */}
+      <section id="about" className="py-24 px-4 bg-white relative overflow-hidden">
+        <div className="max-w-5xl mx-auto">
+          <div className="grid md:grid-cols-2 gap-16 items-center">
+            <div className="space-y-6">
+              <div className="w-16 h-16 bg-pink-100 rounded-2xl flex items-center justify-center text-pink-600"><Sparkles size={32} /></div>
+              <h2 className="text-4xl font-black text-slate-900">It All Started at Dollarama...</h2>
+              <div className="space-y-4 text-lg text-slate-600 leading-relaxed">
+                <p>Pastry Pup was born from a little spark of inspiration! While shopping at <strong>Dollarama</strong>, <strong>Lucy</strong> spotted a "Business Starting Kit."</p>
+                <div className="p-5 bg-gradient-to-br from-pink-50 to-orange-50 rounded-3xl border border-pink-100 shadow-sm">
+                  <h4 className="flex items-center gap-2 font-bold text-slate-800 mb-2"><PartyPopper size={20} className="text-pink-500" /> Such a Fun Project!</h4>
+                  <p className="text-slate-600 italic">This website has been such a fun project for the whole family! Built with the help of <strong>Daddy and Artificial Intelligence</strong>.</p>
+                </div>
+                <p>Today, we're proud to serve dog-themed treats that are 100% made for humans.</p>
+              </div>
+              <div className="pt-4 flex flex-col gap-4">
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 bg-slate-900 rounded-full flex items-center justify-center text-white"><Rocket size={20} /></div>
+                  <span className="font-bold text-slate-900 uppercase tracking-widest text-sm">Founded by Lucy</span>
+                </div>
+                <div className="flex items-center gap-3 text-slate-500 text-sm italic"><Users size={16} /> Two siblings cheering her on!</div>
+              </div>
+            </div>
+            <div className="relative">
+              <div className="absolute inset-0 bg-pink-200 rounded-[3rem] rotate-3 -z-10 opacity-30"></div>
+              <img src="https://images.unsplash.com/photo-1513151233558-d860c5398176?auto=format&fit=crop&q=80&w=500" alt="Celebration" className="rounded-[3rem] shadow-xl w-full" />
+              <div className="absolute -bottom-4 -right-4 bg-white p-4 rounded-2xl shadow-lg border border-slate-100 flex items-center gap-3">
+                <div className="p-2 bg-blue-100 rounded-lg text-blue-600"><Cpu size={20} /></div>
+                <span className="text-xs font-bold text-slate-700">Built with Dad & AI</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
 
       {/* Footer */}
-      <footer className="bg-slate-900 text-white py-20 px-6">
-        <div className="max-w-7xl mx-auto grid md:grid-cols-3 gap-16">
-          <div className="space-y-6">
+      <footer className="bg-slate-900 text-white py-16 px-4">
+        <div className="max-w-7xl mx-auto grid md:grid-cols-3 gap-12">
+          <div className="space-y-4">
             <div className="flex items-center gap-2">
-              <div className="w-8 h-8 bg-pink-500 rounded-full flex items-center justify-center text-white font-black text-sm">P</div>
-              <span className="text-2xl font-black">Pastry Pup</span>
+              <div className="w-8 h-8 bg-pink-500 rounded-full flex items-center justify-center text-white font-bold text-sm">P</div>
+              <span className="text-xl font-bold">Pastry Pup</span>
             </div>
-            <p className="text-slate-400 leading-relaxed">Made for humans. Inspired by pups. Born in a Dollarama kit. Built with Dad and AI.</p>
+            <p className="text-slate-400 text-sm">Human treats for dog people. Founded by Lucy. Built with Dad & AI.</p>
+            <button onClick={() => setIsPortalOpen(true)} className="text-xs text-slate-600 hover:text-pink-400 flex items-center gap-1 transition-colors group">
+              <Lock size={12} className="group-hover:text-pink-500 transition-colors" /> Baker Portal Access
+            </button>
           </div>
-          <div className="grid grid-cols-2 gap-8">
-            <div className="space-y-4">
-              <h4 className="font-black text-sm uppercase tracking-widest text-slate-500">Menu</h4>
-              <ul className="space-y-2 font-bold">
-                <li className="hover:text-pink-500 cursor-pointer transition-colors">Sweets</li>
-                <li className="hover:text-pink-500 cursor-pointer transition-colors">Loaves</li>
-                <li className="hover:text-pink-500 cursor-pointer transition-colors">Breakfast</li>
+          <div className="flex gap-12">
+            <div>
+              <h4 className="font-bold mb-4">Bakery</h4>
+              <ul className="space-y-2 text-sm text-slate-400">
+                <li className="hover:text-pink-400 cursor-pointer transition-colors">Menu</li>
+                <li className="hover:text-pink-400 cursor-pointer transition-colors">Orders</li>
               </ul>
             </div>
-            <div className="space-y-4">
-              <h4 className="font-black text-sm uppercase tracking-widest text-slate-500">Fun</h4>
-              <ul className="space-y-2 font-bold">
-                <li onClick={() => setCurrentPage('arcade')} className="hover:text-pink-500 cursor-pointer transition-colors">Arcade</li>
-                <li className="hover:text-pink-500 cursor-pointer transition-colors">Trivia</li>
+            <div>
+              <h4 className="font-bold mb-4">Arcade</h4>
+              <ul className="space-y-2 text-sm text-slate-400">
+                <li className="hover:text-pink-400 cursor-pointer transition-colors">Disney Trivia</li>
+                <li className="hover:text-pink-400 cursor-pointer transition-colors">Cookie Catcher</li>
               </ul>
             </div>
           </div>
-          <div className="space-y-6">
-            <h4 className="font-black text-sm uppercase tracking-widest text-slate-500">Newsletter</h4>
-            <div className="relative">
-              <input placeholder="paws@pup.com" className="w-full bg-slate-800 border-none rounded-2xl p-4 text-white focus:ring-2 ring-pink-500 transition-all outline-none" />
-              <button className="absolute right-2 top-2 bottom-2 px-4 bg-pink-500 rounded-xl font-bold">Join</button>
+          <div className="space-y-4">
+            <h4 className="font-bold">Bark for Updates</h4>
+            <div className="flex gap-2">
+              <input type="email" placeholder="Your email" className="flex-1 bg-white/10 border border-white/10 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-pink-500 transition-all"/>
+              <button className="bg-pink-500 px-4 py-2 rounded-xl text-sm font-bold">Join</button>
             </div>
           </div>
-        </div>
-        <div className="max-w-7xl mx-auto mt-20 pt-10 border-t border-slate-800 flex flex-col md:flex-row justify-between items-center gap-4 text-slate-500 text-xs font-bold uppercase tracking-widest">
-           <p>© 2024 Pastry Pup Bakery</p>
-           <p className="flex items-center gap-2">Built with <Heart size={12} className="text-pink-500" /> for Lucy</p>
         </div>
       </footer>
+
+      {/* Modals */}
+      <CartDrawer 
+        isOpen={isCartOpen} 
+        onClose={() => setIsCartOpen(false)} 
+        cartItems={cart} 
+        onRemove={removeFromCart} 
+      />
+      <BakerPortal 
+        isOpen={isPortalOpen} 
+        onClose={() => setIsPortalOpen(false)} 
+        products={products} 
+        onAdd={(p) => setProducts([p, ...products])} 
+        onDelete={(id) => setProducts(products.filter(item => item.id !== id))} 
+      />
     </div>
   );
 }
