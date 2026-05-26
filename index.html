@@ -292,8 +292,8 @@
                     }}
                   />
                 </div>
-                <div className="absolute -right-6 -top-6 rotate-12 text-4xl">Cupcake</div>
-                <div className="absolute -bottom-6 -left-6 -rotate-12 text-4xl">Cookie</div>
+                <div className="absolute -right-6 -top-6 rotate-12 text-4xl">🧁</div>
+                <div className="absolute -bottom-6 -left-6 -rotate-12 text-4xl">🍪</div>
               </div>
               <h1 className="font-pacifico mb-6 text-6xl tracking-tight text-pink-500 md:text-9xl">
                 Pastry Pup
@@ -326,7 +326,7 @@
                   name="Pawnut Butter Cookie"
                   desc="Rich peanut butter with honey and a hand-pressed paw print design."
                   price="$2.50"
-                  img="https://placehold.co/400x300/fde68a/92400e?text=Pawnut+Butter"
+                  img="https://placehold.co/400x300/fde68a/92400e?text=Pawnut+Butter+Cookie"
                   isSignature
                 />
                 {menuItems.map((item) => (
@@ -466,7 +466,7 @@
             />
             {isSignature && (
               <div className="absolute left-6 top-6 rounded-full bg-white/95 px-6 py-2 text-sm font-black text-pink-500 shadow-2xl">
-                Signature
+                🐾 Signature
               </div>
             )}
           </div>
@@ -501,21 +501,21 @@
           <div className="grid w-full max-w-6xl grid-cols-1 gap-8 md:grid-cols-3">
             <ArcadeCard
               title="Catching Treats"
-              icon="Game"
+              icon="🐶"
               color="bg-pink-500"
               desc="Move the pup to catch as many treats as you can."
               onClick={() => setView("catching-treats")}
             />
             <ArcadeCard
               title="Wings of Fire Persona"
-              icon="Quiz"
+              icon="🐉"
               color="bg-orange-500"
               desc="Discover your true dragon tribe from Pyrrhia."
               onClick={() => setView("wof-quiz")}
             />
             <ArcadeCard
               title="Disney Personality"
-              icon="Quiz"
+              icon="✨"
               color="bg-blue-500"
               desc="Find out which classic Disney character you are."
               onClick={() => setView("disney-quiz")}
@@ -536,7 +536,7 @@
           className="group flex flex-col items-center rounded-[3rem] bg-white p-10 text-center shadow-2xl transition hover:scale-105 active:scale-95"
         >
           <div
-            className={`mb-6 flex h-24 w-24 items-center justify-center rounded-3xl ${color} text-xl font-black text-white shadow-lg transition group-hover:rotate-3`}
+            className={`mb-6 flex h-24 w-24 items-center justify-center rounded-3xl ${color} text-5xl font-black text-white shadow-lg transition group-hover:rotate-12`}
           >
             {icon}
           </div>
@@ -752,7 +752,7 @@
             movingLeft: false,
             movingRight: false
           };
-          const pastryNames = ["Cookie", "Cupcake", "Donut", "Cake", "Croissant"];
+          const pastryEmojis = ["🍪", "🧁", "🍩", "🍰", "🥐", "🐾", "🥨"];
           let currentScore = 0;
           let currentLives = lives;
           let currentLevel = 1;
@@ -763,7 +763,7 @@
             pastries.push({
               x: Math.random() * (width - pastrySize),
               y: -pastrySize,
-              label: pastryNames[Math.floor(Math.random() * pastryNames.length)],
+              emoji: pastryEmojis[Math.floor(Math.random() * pastryEmojis.length)],
               speed: 3 + currentLevel * 0.5
             });
           };
@@ -779,23 +779,13 @@
             if (doggy.movingRight) doggy.x += doggy.speed;
             doggy.x = Math.max(0, Math.min(width - pupSize, doggy.x));
 
-            ctx.fillStyle = "#f9a8d4";
-            ctx.beginPath();
-            ctx.arc(doggy.x + 25, doggy.y + 25, 25, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.fillStyle = "#831843";
-            ctx.font = "bold 14px Inter";
-            ctx.fillText("Pup", doggy.x + 12, doggy.y + 31);
+            ctx.font = "50px serif";
+            ctx.fillText("🐶", doggy.x, doggy.y + 40);
 
             for (let i = pastries.length - 1; i >= 0; i -= 1) {
               pastries[i].y += pastries[i].speed;
-              ctx.fillStyle = "#fed7aa";
-              ctx.beginPath();
-              ctx.arc(pastries[i].x + 15, pastries[i].y + 15, 15, 0, Math.PI * 2);
-              ctx.fill();
-              ctx.fillStyle = "#7c2d12";
-              ctx.font = "bold 10px Inter";
-              ctx.fillText(pastries[i].label.slice(0, 4), pastries[i].x + 3, pastries[i].y + 19);
+              ctx.font = "30px serif";
+              ctx.fillText(pastries[i].emoji, pastries[i].x, pastries[i].y + 25);
 
               const caught =
                 pastries[i].x < doggy.x + pupSize &&
