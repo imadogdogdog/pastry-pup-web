@@ -1,463 +1,923 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { initializeApp } from 'firebase/app';
-import { getFirestore, collection, addDoc, onSnapshot, doc, deleteDoc, query } from 'firebase/firestore';
-import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Pastry Pup</title>
+    <meta
+      name="description"
+      content="Pastry Pup bakery menu and arcade."
+    />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script type="importmap">
+      {
+        "imports": {
+          "react": "https://esm.sh/react@18.3.1",
+          "react-dom/client": "https://esm.sh/react-dom@18.3.1/client",
+          "firebase/app": "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js",
+          "firebase/firestore": "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js",
+          "firebase/auth": "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js"
+        }
+      }
+    </script>
+    <script src="https://unpkg.com/@babel/standalone@7.25.6/babel.min.js"></script>
+    <style>
+      @import url("https://fonts.googleapis.com/css2?family=Pacifico&family=Inter:wght@400;700;900&display=swap");
 
-const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'pastry-pup-final';
+      body {
+        margin: 0;
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+          "Segoe UI", sans-serif;
+      }
 
-const App = () => {
-  const [db, setDb] = useState(null);
-  const [user, setUser] = useState(null);
-  const [menuItems, setMenuItems] = useState([]);
-  const [isStaffModalOpen, setIsStaffModalOpen] = useState(false);
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [password, setPassword] = useState('');
-  const [newItem, setNewItem] = useState({ name: '', description: '', price: '', img: '' });
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [view, setView] = useState('home'); // 'home', 'arcade', 'catching-treats', 'wof-quiz', 'disney-quiz'
+      .font-pacifico {
+        font-family: Pacifico, cursive;
+      }
 
-  useEffect(() => {
-    if (!firebaseConfig.apiKey) return;
-    const app = initializeApp(firebaseConfig);
-    const database = getFirestore(app);
-    const auth = getAuth(app);
-    setDb(database);
-    signInAnonymously(auth);
-    onAuthStateChanged(auth, (u) => setUser(u));
-  }, []);
+      .animate-float {
+        animation: float 6s ease-in-out infinite;
+      }
 
-  useEffect(() => {
-    if (!db || !user) return;
-    const menuRef = collection(db, 'artifacts', appId, 'public', 'data', 'menuItems');
-    const q = query(menuRef);
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const items = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      setMenuItems(items);
-    });
-    return () => unsubscribe();
-  }, [db, user]);
+      @keyframes float {
+        0%,
+        100% {
+          transform: translateY(0);
+        }
 
-  const handleLogin = () => {
-    if (password === 'pickles!') setIsLoggedIn(true);
-    else alert("Wrong password! Hint: 🥒");
-  };
+        50% {
+          transform: translateY(-15px);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
 
-  const addItem = async () => {
-    if (!newItem.name || !newItem.price) return alert("Fill in the name and price!");
-    try {
-      const menuRef = collection(db, 'artifacts', appId, 'public', 'data', 'menuItems');
-      await addDoc(menuRef, { ...newItem, timestamp: Date.now() });
-      setNewItem({ name: '', description: '', price: '', img: '' });
-    } catch (e) { console.error(e); }
-  };
+    <script type="text/babel" data-type="module">
+      import React, { useEffect, useRef, useState } from "react";
+      import { createRoot } from "react-dom/client";
+      import { initializeApp } from "firebase/app";
+      import {
+        addDoc,
+        collection,
+        deleteDoc,
+        doc,
+        getFirestore,
+        onSnapshot,
+        query
+      } from "firebase/firestore";
+      import {
+        getAuth,
+        onAuthStateChanged,
+        signInAnonymously
+      } from "firebase/auth";
 
-  const removeItem = async (id) => {
-    if (!window.confirm("Delete this recipe?")) return;
-    try { await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'menuItems', id)); }
-    catch (e) { console.error(e); }
-  };
+      const firebaseConfig = {
+        // Paste your Firebase web app config here if you want the staff menu editor
+        // to save items online. The site still works without it.
+        // apiKey: "",
+        // authDomain: "",
+        // projectId: "",
+        // storageBucket: "",
+        // messagingSenderId: "",
+        // appId: ""
+      };
 
-  const renderView = () => {
-    switch(view) {
-      case 'arcade': return <ArcadeMenu setView={setView} onExit={() => setView('home')} />;
-      case 'catching-treats': return <CatchingTreatsGame onExit={() => setView('arcade')} />;
-      case 'wof-quiz': return <PersonalityQuiz type="wof" onExit={() => setView('arcade')} />;
-      case 'disney-quiz': return <PersonalityQuiz type="disney" onExit={() => setView('arcade')} />;
-      default: return <HomeView />;
-    }
-  };
+      const appId = "pastry-pup-final";
+      const fallbackLogo =
+        "https://placehold.co/300x300/f9a8d4/ffffff?text=Pastry+Pup";
 
-  const HomeView = () => (
-    <div className="min-h-screen bg-[#FEFCE8] text-slate-800 font-sans scroll-smooth">
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Pacifico&family=Inter:wght@400;700;900&display=swap');
-        .font-pacifico { font-family: 'Pacifico', cursive; }
-        .animate-float { animation: float 6s ease-in-out infinite; }
-        @keyframes float { 0%, 100% { transform: translateY(0px); } 50% { transform: translateY(-15px); } }
-      `}</style>
+      const App = () => {
+        const [db, setDb] = useState(null);
+        const [user, setUser] = useState(null);
+        const [menuItems, setMenuItems] = useState([]);
+        const [isStaffModalOpen, setIsStaffModalOpen] = useState(false);
+        const [isLoggedIn, setIsLoggedIn] = useState(false);
+        const [password, setPassword] = useState("");
+        const [newItem, setNewItem] = useState({
+          name: "",
+          description: "",
+          price: "",
+          img: ""
+        });
+        const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+        const [view, setView] = useState("home");
 
-      {/* Header */}
-      <header className="fixed w-full top-0 z-50 bg-white/90 backdrop-blur-md border-b border-pink-100">
-        <div className="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
-          <div className="flex items-center gap-3 cursor-pointer" onClick={() => setView('home')}>
-            <img src="85328.png" alt="Pastry Pup Logo" className="w-14 h-14 rounded-full shadow-md object-cover bg-pink-50" onError={(e) => e.target.src='https://placehold.co/100x100/f9a8d4/ffffff?text=PP'} />
-            <span className="text-2xl font-pacifico text-pink-500">Pastry Pup</span>
-          </div>
-          <nav className="hidden md:flex items-center gap-8 font-bold text-slate-600">
-            <a href="#hero" className="hover:text-pink-500 transition">Home</a>
-            <a href="#menu" className="hover:text-pink-500 transition">Menu</a>
-            <button onClick={() => setView('arcade')} className="px-5 py-2 bg-purple-500 text-white rounded-full hover:bg-purple-600 transition text-sm font-black shadow-md flex items-center gap-2">Arcade 🕹️</button>
-            <button onClick={() => setIsStaffModalOpen(true)} className="px-5 py-2 bg-pink-50 text-pink-600 rounded-full hover:bg-pink-100 transition text-sm font-black border border-pink-200">Staff Only 🔒</button>
-          </nav>
-          <button className="md:hidden text-2xl" onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}>☰</button>
-        </div>
-      </header>
+        useEffect(() => {
+          if (!firebaseConfig.apiKey) return;
+          const app = initializeApp(firebaseConfig);
+          const database = getFirestore(app);
+          const auth = getAuth(app);
+          setDb(database);
+          signInAnonymously(auth).catch(console.error);
+          return onAuthStateChanged(auth, (u) => setUser(u));
+        }, []);
 
-      {/* Mobile Menu */}
-      {isMobileMenuOpen && (
-        <div className="fixed inset-0 z-[60] bg-white flex flex-col items-center justify-center gap-8 p-10 md:hidden">
-          <button onClick={() => setIsMobileMenuOpen(false)} className="absolute top-6 right-6 text-4xl">&times;</button>
-          <button onClick={() => { setView('home'); setIsMobileMenuOpen(false); }} className="text-3xl font-black">Home</button>
-          <a href="#menu" className="text-3xl font-black" onClick={() => setIsMobileMenuOpen(false)}>Menu</a>
-          <button onClick={() => { setView('arcade'); setIsMobileMenuOpen(false); }} className="text-3xl font-black text-purple-500">Arcade 🕹️</button>
-          <button onClick={() => { setIsStaffModalOpen(true); setIsMobileMenuOpen(false); }} className="text-3xl font-black text-pink-500">Staff Login 🔒</button>
-        </div>
-      )}
+        useEffect(() => {
+          if (!db || !user) return;
+          const menuRef = collection(
+            db,
+            "artifacts",
+            appId,
+            "public",
+            "data",
+            "menuItems"
+          );
+          const unsubscribe = onSnapshot(query(menuRef), (snapshot) => {
+            const items = snapshot.docs.map((doc) => ({
+              id: doc.id,
+              ...doc.data()
+            }));
+            setMenuItems(items);
+          });
+          return unsubscribe;
+        }, [db, user]);
 
-      {/* Hero */}
-      <section id="hero" className="relative pt-32 pb-20 px-6 overflow-hidden flex flex-col items-center justify-center min-h-[90vh] text-center bg-gradient-to-b from-pink-50 via-white to-[#FEFCE8]">
-        <div className="relative mb-10 animate-float">
-          <div className="w-64 h-64 md:w-80 md:h-80 bg-white rounded-[3rem] p-4 shadow-2xl flex items-center justify-center overflow-hidden border-8 border-white">
-            <img src="85328.png" alt="Mascot" className="w-full h-full object-contain" onError={(e) => e.target.src='https://placehold.co/400x400/f9a8d4/ffffff?text=Pup'} />
-          </div>
-          <div className="absolute -top-6 -right-6 text-4xl transform rotate-12">🧁</div>
-          <div className="absolute -bottom-6 -left-6 text-4xl transform -rotate-12">🍪</div>
-        </div>
-        <h1 className="text-6xl md:text-9xl font-pacifico text-pink-500 mb-6 tracking-tight">Pastry Pup</h1>
-        <p className="text-2xl md:text-4xl font-black text-orange-900 tracking-tight max-w-2xl leading-tight">Inspired by puppies, baked for humans.</p>
-        <div className="mt-12 flex flex-wrap justify-center gap-5">
-          <a href="#menu" className="bg-pink-500 text-white px-10 py-5 rounded-full font-black text-2xl shadow-xl hover:bg-pink-600 transition hover:scale-105">Explore Menu</a>
-          <button onClick={() => setView('arcade')} className="bg-purple-500 text-white px-10 py-5 rounded-full font-black text-2xl shadow-xl hover:bg-purple-600 transition hover:scale-105">Go to Arcade 🕹️</button>
-        </div>
-      </section>
+        const handleLogin = () => {
+          if (password === "pickles!") setIsLoggedIn(true);
+          else alert("Wrong password! Hint: cucumber");
+        };
 
-      {/* Menu */}
-      <section id="menu" className="max-w-7xl mx-auto px-6 py-24">
-        <h2 className="text-5xl font-black text-slate-800 text-center mb-16">Baked Fresh Today</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-12">
-          <MenuItem name="Pawnut Butter Cookie" desc="Rich peanut butter with honey and a hand-pressed paw print design." price="$2.50" img="https://placehold.co/400x300/fde68a/92400e?text=Pawnut+Butter+🐾" isSignature={true} />
-          {menuItems.map(item => <MenuItem key={item.id} {...item} />)}
-        </div>
-      </section>
+        const addItem = async () => {
+          if (!db) {
+            alert("Firebase is not configured yet, so online menu editing is disabled.");
+            return;
+          }
+          if (!newItem.name || !newItem.price) {
+            alert("Fill in the name and price!");
+            return;
+          }
+          const menuRef = collection(
+            db,
+            "artifacts",
+            appId,
+            "public",
+            "data",
+            "menuItems"
+          );
+          await addDoc(menuRef, { ...newItem, timestamp: Date.now() });
+          setNewItem({ name: "", description: "", price: "", img: "" });
+        };
 
-      {/* Staff Modal */}
-      {isStaffModalOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-          <div className="bg-white w-full max-w-md rounded-[3rem] p-10 shadow-2xl relative max-h-[90vh] overflow-y-auto">
-            <button onClick={() => setIsStaffModalOpen(false)} className="absolute top-6 right-8 text-4xl text-slate-300 hover:text-slate-600 transition">&times;</button>
-            {!isLoggedIn ? (
-              <div className="text-center py-4">
-                <h3 className="text-3xl font-black mb-6">Staff Portal</h3>
-                <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} onKeyPress={(e) => e.key === 'Enter' && handleLogin()} placeholder="Secret Password" class="w-full p-5 border-4 border-slate-50 rounded-3xl mb-4 text-center text-xl font-bold outline-none focus:border-pink-300" />
-                <button onClick={handleLogin} className="w-full bg-pink-500 text-white font-black py-5 rounded-3xl hover:bg-pink-600 shadow-lg">Unlock Bakery</button>
+        const removeItem = async (id) => {
+          if (!db || !window.confirm("Delete this recipe?")) return;
+          await deleteDoc(
+            doc(db, "artifacts", appId, "public", "data", "menuItems", id)
+          );
+        };
+
+        const renderView = () => {
+          switch (view) {
+            case "arcade":
+              return <ArcadeMenu setView={setView} onExit={() => setView("home")} />;
+            case "catching-treats":
+              return <CatchingTreatsGame onExit={() => setView("arcade")} />;
+            case "wof-quiz":
+              return <PersonalityQuiz type="wof" onExit={() => setView("arcade")} />;
+            case "disney-quiz":
+              return (
+                <PersonalityQuiz type="disney" onExit={() => setView("arcade")} />
+              );
+            default:
+              return <HomeView />;
+          }
+        };
+
+        const HomeView = () => (
+          <div className="min-h-screen bg-[#FEFCE8] text-slate-800 scroll-smooth">
+            <header className="fixed top-0 z-50 w-full border-b border-pink-100 bg-white/90 backdrop-blur-md">
+              <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
+                <button
+                  className="flex items-center gap-3"
+                  onClick={() => setView("home")}
+                >
+                  <img
+                    src="85328.png"
+                    alt="Pastry Pup Logo"
+                    className="h-14 w-14 rounded-full bg-pink-50 object-cover shadow-md"
+                    onError={(e) => {
+                      e.currentTarget.src = fallbackLogo;
+                    }}
+                  />
+                  <span className="font-pacifico text-2xl text-pink-500">
+                    Pastry Pup
+                  </span>
+                </button>
+                <nav className="hidden items-center gap-8 font-bold text-slate-600 md:flex">
+                  <a href="#hero" className="transition hover:text-pink-500">
+                    Home
+                  </a>
+                  <a href="#menu" className="transition hover:text-pink-500">
+                    Menu
+                  </a>
+                  <button
+                    onClick={() => setView("arcade")}
+                    className="rounded-full bg-purple-500 px-5 py-2 text-sm font-black text-white shadow-md transition hover:bg-purple-600"
+                  >
+                    Arcade
+                  </button>
+                  <button
+                    onClick={() => setIsStaffModalOpen(true)}
+                    className="rounded-full border border-pink-200 bg-pink-50 px-5 py-2 text-sm font-black text-pink-600 transition hover:bg-pink-100"
+                  >
+                    Staff Only
+                  </button>
+                </nav>
+                <button
+                  className="text-2xl md:hidden"
+                  onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+                >
+                  Menu
+                </button>
               </div>
-            ) : (
-              <div className="space-y-6">
-                <h3 className="text-3xl font-black text-slate-800">Kitchen Manager</h3>
-                <div className="space-y-4 p-6 bg-slate-50 rounded-[2rem]">
-                  <input value={newItem.name} onChange={e => setNewItem({...newItem, name: e.target.value})} placeholder="Item Name" className="w-full p-4 rounded-2xl font-bold outline-none" />
-                  <textarea value={newItem.description} onChange={e => setNewItem({...newItem, description: e.target.value})} placeholder="Description" className="w-full p-4 rounded-2xl h-24 outline-none" />
-                  <input value={newItem.price} onChange={e => setNewItem({...newItem, price: e.target.value})} placeholder="Price" className="w-full p-4 rounded-2xl font-bold outline-none" />
-                  <input value={newItem.img} onChange={e => setNewItem({...newItem, img: e.target.value})} placeholder="Image URL" className="w-full p-4 rounded-2xl outline-none" />
-                  <button onClick={addItem} className="w-full bg-green-500 text-white font-black py-4 rounded-2xl hover:bg-green-600 transition">Add Treat</button>
+            </header>
+
+            {isMobileMenuOpen && (
+              <div className="fixed inset-0 z-[60] flex flex-col items-center justify-center gap-8 bg-white p-10 md:hidden">
+                <button
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  className="absolute right-6 top-6 text-4xl"
+                >
+                  &times;
+                </button>
+                <button
+                  onClick={() => {
+                    setView("home");
+                    setIsMobileMenuOpen(false);
+                  }}
+                  className="text-3xl font-black"
+                >
+                  Home
+                </button>
+                <a
+                  href="#menu"
+                  className="text-3xl font-black"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                >
+                  Menu
+                </a>
+                <button
+                  onClick={() => {
+                    setView("arcade");
+                    setIsMobileMenuOpen(false);
+                  }}
+                  className="text-3xl font-black text-purple-500"
+                >
+                  Arcade
+                </button>
+                <button
+                  onClick={() => {
+                    setIsStaffModalOpen(true);
+                    setIsMobileMenuOpen(false);
+                  }}
+                  className="text-3xl font-black text-pink-500"
+                >
+                  Staff Login
+                </button>
+              </div>
+            )}
+
+            <section
+              id="hero"
+              className="relative flex min-h-[90vh] flex-col items-center justify-center overflow-hidden bg-gradient-to-b from-pink-50 via-white to-[#FEFCE8] px-6 pb-20 pt-32 text-center"
+            >
+              <div className="animate-float relative mb-10">
+                <div className="flex h-64 w-64 items-center justify-center overflow-hidden rounded-[3rem] border-8 border-white bg-white p-4 shadow-2xl md:h-80 md:w-80">
+                  <img
+                    src="85328.png"
+                    alt="Mascot"
+                    className="h-full w-full object-contain"
+                    onError={(e) => {
+                      e.currentTarget.src = fallbackLogo;
+                    }}
+                  />
                 </div>
-                <div className="space-y-2">
-                  <h4 className="font-black text-slate-400 uppercase text-xs">Manage Display</h4>
-                  {menuItems.map(item => (
-                    <div key={item.id} className="flex justify-between items-center p-4 bg-white border-2 border-slate-50 rounded-2xl">
-                      <span className="font-bold truncate mr-2">{item.name}</span>
-                      <button onClick={() => removeItem(item.id)} className="bg-red-500 text-white text-xs px-4 py-2 rounded-xl">Delete</button>
+                <div className="absolute -right-6 -top-6 rotate-12 text-4xl">Cupcake</div>
+                <div className="absolute -bottom-6 -left-6 -rotate-12 text-4xl">Cookie</div>
+              </div>
+              <h1 className="font-pacifico mb-6 text-6xl tracking-tight text-pink-500 md:text-9xl">
+                Pastry Pup
+              </h1>
+              <p className="max-w-2xl text-2xl font-black leading-tight tracking-tight text-orange-900 md:text-4xl">
+                Inspired by puppies, baked for humans.
+              </p>
+              <div className="mt-12 flex flex-wrap justify-center gap-5">
+                <a
+                  href="#menu"
+                  className="rounded-full bg-pink-500 px-10 py-5 text-2xl font-black text-white shadow-xl transition hover:scale-105 hover:bg-pink-600"
+                >
+                  Explore Menu
+                </a>
+                <button
+                  onClick={() => setView("arcade")}
+                  className="rounded-full bg-purple-500 px-10 py-5 text-2xl font-black text-white shadow-xl transition hover:scale-105 hover:bg-purple-600"
+                >
+                  Go to Arcade
+                </button>
+              </div>
+            </section>
+
+            <section id="menu" className="mx-auto max-w-7xl px-6 py-24">
+              <h2 className="mb-16 text-center text-5xl font-black text-slate-800">
+                Baked Fresh Today
+              </h2>
+              <div className="grid grid-cols-1 gap-12 md:grid-cols-2 lg:grid-cols-3">
+                <MenuItem
+                  name="Pawnut Butter Cookie"
+                  desc="Rich peanut butter with honey and a hand-pressed paw print design."
+                  price="$2.50"
+                  img="https://placehold.co/400x300/fde68a/92400e?text=Pawnut+Butter"
+                  isSignature
+                />
+                {menuItems.map((item) => (
+                  <MenuItem key={item.id} {...item} />
+                ))}
+              </div>
+            </section>
+
+            {isStaffModalOpen && (
+              <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+                <div className="relative max-h-[90vh] w-full max-w-md overflow-y-auto rounded-[3rem] bg-white p-10 shadow-2xl">
+                  <button
+                    onClick={() => setIsStaffModalOpen(false)}
+                    className="absolute right-8 top-6 text-4xl text-slate-300 transition hover:text-slate-600"
+                  >
+                    &times;
+                  </button>
+                  {!isLoggedIn ? (
+                    <div className="py-4 text-center">
+                      <h3 className="mb-6 text-3xl font-black">Staff Portal</h3>
+                      <input
+                        type="password"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        onKeyDown={(e) => e.key === "Enter" && handleLogin()}
+                        placeholder="Secret Password"
+                        className="mb-4 w-full rounded-3xl border-4 border-slate-50 p-5 text-center text-xl font-bold outline-none focus:border-pink-300"
+                      />
+                      <button
+                        onClick={handleLogin}
+                        className="w-full rounded-3xl bg-pink-500 py-5 font-black text-white shadow-lg hover:bg-pink-600"
+                      >
+                        Unlock Bakery
+                      </button>
                     </div>
-                  ))}
+                  ) : (
+                    <div className="space-y-6">
+                      <h3 className="text-3xl font-black text-slate-800">
+                        Kitchen Manager
+                      </h3>
+                      {!db && (
+                        <p className="rounded-2xl bg-amber-50 p-4 text-sm font-bold text-amber-800">
+                          Firebase is not configured, so added treats will not save yet.
+                        </p>
+                      )}
+                      <div className="space-y-4 rounded-[2rem] bg-slate-50 p-6">
+                        <input
+                          value={newItem.name}
+                          onChange={(e) =>
+                            setNewItem({ ...newItem, name: e.target.value })
+                          }
+                          placeholder="Item Name"
+                          className="w-full rounded-2xl p-4 font-bold outline-none"
+                        />
+                        <textarea
+                          value={newItem.description}
+                          onChange={(e) =>
+                            setNewItem({
+                              ...newItem,
+                              description: e.target.value
+                            })
+                          }
+                          placeholder="Description"
+                          className="h-24 w-full rounded-2xl p-4 outline-none"
+                        />
+                        <input
+                          value={newItem.price}
+                          onChange={(e) =>
+                            setNewItem({ ...newItem, price: e.target.value })
+                          }
+                          placeholder="Price"
+                          className="w-full rounded-2xl p-4 font-bold outline-none"
+                        />
+                        <input
+                          value={newItem.img}
+                          onChange={(e) =>
+                            setNewItem({ ...newItem, img: e.target.value })
+                          }
+                          placeholder="Image URL"
+                          className="w-full rounded-2xl p-4 outline-none"
+                        />
+                        <button
+                          onClick={addItem}
+                          className="w-full rounded-2xl bg-green-500 py-4 font-black text-white transition hover:bg-green-600"
+                        >
+                          Add Treat
+                        </button>
+                      </div>
+                      <div className="space-y-2">
+                        <h4 className="text-xs font-black uppercase text-slate-400">
+                          Manage Display
+                        </h4>
+                        {menuItems.map((item) => (
+                          <div
+                            key={item.id}
+                            className="flex items-center justify-between rounded-2xl border-2 border-slate-50 bg-white p-4"
+                          >
+                            <span className="mr-2 truncate font-bold">
+                              {item.name}
+                            </span>
+                            <button
+                              onClick={() => removeItem(item.id)}
+                              className="rounded-xl bg-red-500 px-4 py-2 text-xs text-white"
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             )}
+
+            <footer className="mt-20 rounded-t-[5rem] bg-slate-900 px-6 py-20 text-center text-white">
+              <div className="font-pacifico mb-8 text-4xl text-pink-400">
+                Pastry Pup
+              </div>
+              <p className="text-xs font-black uppercase tracking-widest text-slate-500">
+                &copy; 2026 Pastry Pup Bakery Ltd. All Rights Reserved.
+              </p>
+            </footer>
+          </div>
+        );
+
+        return renderView();
+      };
+
+      const MenuItem = ({ name, desc, description, price, img, isSignature }) => (
+        <div className="group rounded-[4rem] bg-white p-8 shadow-2xl transition-all duration-500 hover:scale-[1.03]">
+          <div className="relative mb-8 aspect-[4/3] overflow-hidden rounded-[3rem]">
+            <img
+              src={img || "https://placehold.co/400x300/fbcfe8/831843?text=Treat"}
+              alt={name}
+              className="h-full w-full object-cover transition-transform duration-1000 group-hover:scale-110"
+            />
+            {isSignature && (
+              <div className="absolute left-6 top-6 rounded-full bg-white/95 px-6 py-2 text-sm font-black text-pink-500 shadow-2xl">
+                Signature
+              </div>
+            )}
+          </div>
+          <h3 className="mb-3 text-3xl font-black text-slate-800">{name}</h3>
+          <p className="mb-10 line-clamp-3 text-lg font-medium leading-relaxed text-slate-500">
+            {desc || description}
+          </p>
+          <div className="flex items-center justify-between rounded-[2.5rem] bg-slate-50 p-4">
+            <span className="pl-4 text-3xl font-black text-pink-500">{price}</span>
+            <button className="rounded-2xl bg-slate-900 px-8 py-3 font-black text-white transition-all hover:bg-pink-500">
+              Order
+            </button>
           </div>
         </div>
-      )}
+      );
 
-      <footer className="bg-slate-900 text-white py-20 px-6 mt-20 rounded-t-[5rem] text-center">
-        <div className="text-4xl font-pacifico text-pink-400 mb-8">Pastry Pup</div>
-        <p className="text-slate-500 uppercase font-black tracking-widest text-xs">&copy; 2026 Pastry Pup Bakery Ltd. All Rights Reserved.</p>
-      </footer>
-    </div>
-  );
-
-  return renderView();
-};
-
-const MenuItem = ({ name, desc, price, img, isSignature }) => (
-  <div className="group bg-white rounded-[4rem] p-8 shadow-2xl transition-all duration-500 hover:scale-[1.03]">
-    <div className="overflow-hidden rounded-[3rem] aspect-[4/3] mb-8 relative">
-      <img src={img} alt={name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-1000" />
-      {isSignature && <div className="absolute top-6 left-6 bg-white/95 text-pink-500 px-6 py-2 rounded-full text-sm font-black shadow-2xl">🐾 Signature</div>}
-    </div>
-    <h3 className="text-3xl font-black text-slate-800 mb-3">{name}</h3>
-    <p className="text-slate-500 text-lg font-medium mb-10 line-clamp-3 leading-relaxed">{desc}</p>
-    <div className="flex justify-between items-center bg-slate-50 p-4 rounded-[2.5rem]">
-      <span className="text-3xl font-black text-pink-500 pl-4">{price}</span>
-      <button className="bg-slate-900 text-white px-8 py-3 rounded-2xl font-black hover:bg-pink-500 transition-all">Order</button>
-    </div>
-  </div>
-);
-
-// ARCADE MENU
-const ArcadeMenu = ({ setView, onExit }) => (
-  <div className="min-h-screen bg-[#FEFCE8] p-10 flex flex-col items-center">
-    <div className="flex items-center gap-4 mb-8">
-      <img src="85328.png" className="w-20 h-20 rounded-full shadow-lg border-4 border-white object-cover" alt="Logo" onError={(e) => e.target.src='https://placehold.co/100x100/f9a8d4/ffffff?text=Logo'} />
-      <h1 className="text-6xl font-pacifico text-pink-500">Pastry Pup Arcade</h1>
-    </div>
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-8 w-full max-w-6xl">
-      <ArcadeCard title="Catching Treats with Puppy" icon="🐶" color="bg-pink-500" desc="Move the pup to catch as many treats as you can!" onClick={() => setView('catching-treats')} />
-      <ArcadeCard title="Wings of Fire Persona" icon="🐉" color="bg-orange-500" desc="Discover your true dragon tribe from Pyrrhia." onClick={() => setView('wof-quiz')} />
-      <ArcadeCard title="Disney Personality" icon="✨" color="bg-blue-500" desc="Find out which classic Disney character you are!" onClick={() => setView('disney-quiz')} />
-    </div>
-    <button onClick={onExit} className="mt-20 text-slate-400 font-black hover:text-pink-500 underline text-xl transition">Back to Bakery</button>
-  </div>
-);
-
-const ArcadeCard = ({ title, icon, color, desc, onClick }) => (
-  <div onClick={onClick} className="bg-white rounded-[3rem] p-10 shadow-2xl flex flex-col items-center text-center cursor-pointer hover:scale-105 transition transform active:scale-95 group">
-    <div className={`w-24 h-24 ${color} rounded-3xl text-5xl flex items-center justify-center mb-6 shadow-lg group-hover:rotate-12 transition`}>{icon}</div>
-    <h3 className="text-2xl font-black mb-4">{title}</h3>
-    <p className="text-slate-500 font-medium leading-relaxed">{desc}</p>
-  </div>
-);
-
-// CONSOLIDATED PERSONALITY QUIZ
-const PersonalityQuiz = ({ type, onExit }) => {
-  const [step, setStep] = useState(0);
-  const [scores, setScores] = useState({});
-  const [result, setResult] = useState(null);
-
-  const data = {
-    wof: {
-      title: "Wings of Fire Tribe Quiz",
-      questions: [
-        { q: "What's your favorite environment?", options: [
-          { t: "SeaWing", a: "Deep, mysterious ocean" },
-          { t: "RainWing", a: "Lush, sun-dappled rainforest" },
-          { t: "SandWing", a: "Hot, golden desert" },
-          { t: "NightWing", a: "Vast, starry night sky" },
-          { t: "IceWing", a: "Crisp, frozen peaks" }
-        ]},
-        { q: "What's your best trait?", options: [
-          { t: "MudWing", a: "Fierce loyalty to family" },
-          { t: "SkyWing", a: "Powerful, fast flight" },
-          { t: "NightWing", a: "Hidden, deep intelligence" },
-          { t: "RainWing", a: "Calm, peaceful nature" },
-          { t: "IceWing", a: "Noble, cold elegance" }
-        ]},
-        { q: "Choose a special ability:", options: [
-          { t: "RainWing", a: "Magical camouflage scales" },
-          { t: "SeaWing", a: "Seeing perfectly in the dark water" },
-          { t: "IceWing", a: "Frostbreath that freezes foes" },
-          { t: "NightWing", a: "Reading minds or seeing the future" },
-          { t: "SkyWing", a: "Flying faster than any other tribe" }
-        ]},
-        { q: "What is your ideal snack?", options: [
-          { t: "SandWing", a: "Roasted scorpions" },
-          { t: "MudWing", a: "Fresh, juicy swamp cow" },
-          { t: "SeaWing", a: "Succulent, raw fish" },
-          { t: "RainWing", a: "Delicious tropical fruits" },
-          { t: "SkyWing", a: "Freshly roasted mountain goat" }
-        ]},
-        { q: "How do you handle a conflict?", options: [
-          { t: "SeaWing", a: "Dive away and think it through" },
-          { t: "SkyWing", a: "Attack with blazing speed!" },
-          { t: "RainWing", a: "Wait for it to pass or use peace" },
-          { t: "IceWing", a: "Face it with cold logic" },
-          { t: "NightWing", a: "Observe and outsmart them" }
-        ]}
-      ],
-      results: {
-        SeaWing: "You are a SeaWing! You are a master of the water, a great communicator, and find peace in the waves.",
-        RainWing: "You are a RainWing! You are peaceful, vibrant, and possess hidden talents that surprise everyone.",
-        NightWing: "You are a NightWing! You are mysterious, wise, and highly observant of everything around you.",
-        SkyWing: "You are a SkyWing! You are powerful, fast, and a fierce protector of your mountain home.",
-        IceWing: "You are an IceWing! You are noble, elegant, and handle pressure with cool-headed logic.",
-        SandWing: "You are a SandWing! You are clever, resilient, and can survive even the harshest conditions.",
-        MudWing: "You are a MudWing! You value family above all else and possess incredible physical strength."
-      }
-    },
-    disney: {
-      title: "Disney Personality Quiz",
-      questions: [
-        { q: "What do you value most?", options: [
-          { t: "Mulan", a: "Honor and protecting family" },
-          { t: "Belle", a: "Learning and seeing the world" },
-          { t: "Stitch", a: "Finding a place to belong" },
-          { t: "Elsa", a: "Accepting yourself as you are" },
-          { t: "Simba", a: "Leadership and following your heart" }
-        ]},
-        { q: "Pick an ideal sidekick:", options: [
-          { t: "Simba", a: "A funny warthog and meerkat" },
-          { t: "Mulan", a: "A tiny, feisty dragon" },
-          { t: "Ariel", a: "A nervous but loyal fish" },
-          { t: "Elsa", a: "A magical, friendly snowman" },
-          { t: "Mickey", a: "A clumsy but sweet dog" }
-        ]},
-        { q: "Where would your dream home be?", options: [
-          { t: "Simba", a: "A vast, beautiful savannah" },
-          { t: "Ariel", a: "A colorful underwater palace" },
-          { t: "Elsa", a: "A sparkling, quiet ice castle" },
-          { t: "Moana", a: "A tropical island by the sea" },
-          { t: "Belle", a: "A cozy cottage full of books" }
-        ]},
-        { q: "How do you face a villain?", options: [
-          { t: "Mulan", a: "With clever strategy and bravery" },
-          { t: "Mickey", a: "With optimism and friendship" },
-          { t: "Elsa", a: "With powerful, magical focus" },
-          { t: "Belle", a: "By trying to find the good in them" },
-          { t: "Stitch", a: "With high-energy chaos!" }
-        ]},
-        { q: "What is your biggest dream?", options: [
-          { t: "Tiana", a: "Opening my own successful bakery!" },
-          { t: "Rapunzel", a: "Finding where I truly belong" },
-          { t: "Aladdin", a: "To be more than just a street rat" },
-          { t: "Ariel", a: "To explore worlds I've never seen" },
-          { t: "Hercules", a: "To prove I am a true hero" }
-        ]}
-      ],
-      results: {
-        Mulan: "You are Mulan! You are incredibly courageous and define your own destiny through strength and wits.",
-        Belle: "You are Belle! You look past first impressions and value the beauty of the mind and heart.",
-        Stitch: "You are Stitch! You're unique, a bit chaotic, but you'll do anything for your 'Ohana'.",
-        Elsa: "You are Elsa! You are powerful and composed, but you're learning to let your true self shine.",
-        Simba: "You are Simba! You are brave and grow stronger through every challenge you face.",
-        Mickey: "You are Mickey Mouse! You're an optimist and a natural leader who values your friends most.",
-        Ariel: "You are Ariel! You are curious, musical, and always dreaming of what lies beyond the horizon.",
-        Tiana: "You are Tiana! You are hardworking, determined, and have the soul of a master baker!",
-        Moana: "You are Moana! You follow the call of the ocean and are a natural-born voyager."
-      }
-    }
-  };
-
-  const currentQuiz = data[type];
-
-  const handleAnswer = (choice) => {
-    const newScores = { ...scores, [choice]: (scores[choice] || 0) + 1 };
-    setScores(newScores);
-    if (step + 1 < currentQuiz.questions.length) setStep(step + 1);
-    else {
-      const winner = Object.keys(newScores).reduce((a, b) => newScores[a] > newScores[b] ? a : b);
-      setResult(winner);
-    }
-  };
-
-  return (
-    <div className="min-h-screen bg-[#FEFCE8] flex items-center justify-center p-6 font-sans">
-      <div className="bg-white rounded-[3rem] p-12 shadow-2xl max-w-2xl w-full text-center">
-        {!result ? (
-          <>
-            <div className="flex justify-center mb-6">
-              <img src="85328.png" className="w-20 h-20 rounded-full object-cover border-4 border-pink-50" alt="Logo" />
-            </div>
-            <h2 className="text-4xl font-black text-pink-500 mb-10">{currentQuiz.title}</h2>
-            <div className="mb-4 text-slate-400 font-black uppercase text-xs tracking-widest">Question {step + 1} of {currentQuiz.questions.length}</div>
-            <p className="text-2xl font-bold mb-8 text-slate-700 leading-tight">{currentQuiz.questions[step].q}</p>
-            <div className="grid gap-4">
-              {currentQuiz.questions[step].options.map((opt, i) => (
-                <button key={i} onClick={() => handleAnswer(opt.t)} className="p-5 bg-slate-50 border-2 border-transparent rounded-2xl font-bold text-xl hover:bg-pink-100 hover:border-pink-200 transition text-slate-700 active:scale-95">{opt.a}</button>
-              ))}
-            </div>
-          </>
-        ) : (
-          <>
-            <div className="flex justify-center mb-8">
-              <img src="85328.png" className="w-32 h-32 rounded-full object-cover shadow-xl border-4 border-white" alt="Logo" />
-            </div>
-            <h2 className="text-3xl font-bold mb-2 text-slate-500">Your match is...</h2>
-            <h1 className="text-6xl font-black text-pink-500 mb-6 drop-shadow-sm">{result}!</h1>
-            <p className="text-xl text-slate-600 mb-10 font-medium leading-relaxed max-w-md mx-auto">{currentQuiz.results[result]}</p>
-            <button onClick={onExit} className="px-10 py-5 bg-pink-500 text-white rounded-3xl font-black text-xl shadow-lg hover:bg-pink-600 transition active:scale-95">Back to Arcade</button>
-          </>
-        )}
-      </div>
-    </div>
-  );
-};
-
-// CATCHING TREATS GAME
-const CatchingTreatsGame = ({ onExit }) => {
-  const canvasRef = useRef(null);
-  const [score, setScore] = useState(0);
-  const [level, setLevel] = useState(1);
-  const [lives, setLives] = useState(0);
-  const [gameStatus, setGameStatus] = useState('start');
-
-  const startGame = (l) => { setLives(l); setScore(0); setLevel(1); setGameStatus('playing'); };
-
-  useEffect(() => {
-    if (gameStatus !== 'playing') return;
-    const canvas = canvasRef.current;
-    const ctx = canvas.getContext('2d');
-    const CANVAS_WIDTH = 500; const CANVAS_HEIGHT = 400; const DOGGY_SIZE = 50; const PASTRY_SIZE = 30;
-    const PASTRY_EMOJIS = ['🍪', '🧁', '🍩', '🍰', '🥐', '🐾', '🥨'];
-    let doggy = { x: 225, y: 340, speed: 10, movingLeft: false, movingRight: false };
-    let pastries = [];
-    let currentScore = 0; let currentLives = lives; let currentLevel = 1; let animationId;
-
-    const spawn = () => { pastries.push({ x: Math.random() * (CANVAS_WIDTH - PASTRY_SIZE), y: -PASTRY_SIZE, emoji: PASTRY_EMOJIS[Math.floor(Math.random() * PASTRY_EMOJIS.length)], speed: 3 + (currentLevel * 0.5) }); };
-    let lastSpawnTime = 0;
-    const update = (time) => {
-      const spawnRate = Math.max(200, 1000 - (currentLevel * 100));
-      if (time - lastSpawnTime > spawnRate) { spawn(); lastSpawnTime = time; }
-      ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
-      if (doggy.movingLeft) doggy.x -= doggy.speed;
-      if (doggy.movingRight) doggy.x += doggy.speed;
-      doggy.x = Math.max(0, Math.min(CANVAS_WIDTH - DOGGY_SIZE, doggy.x));
-      
-      ctx.font = "50px serif"; ctx.fillText('🐶', doggy.x, doggy.y + 40);
-      
-      for (let i = pastries.length - 1; i >= 0; i--) {
-        pastries[i].y += pastries[i].speed;
-        ctx.font = "30px serif"; ctx.fillText(pastries[i].emoji, pastries[i].x, pastries[i].y + 25);
-        if (pastries[i].x < doggy.x + DOGGY_SIZE && pastries[i].x + PASTRY_SIZE > doggy.x && pastries[i].y < doggy.y + DOGGY_SIZE && pastries[i].y + PASTRY_SIZE > doggy.y) {
-          currentScore++; setScore(currentScore); pastries.splice(i, 1);
-          if (currentScore % 20 === 0) { currentLevel++; setLevel(currentLevel); }
-        } else if (pastries[i].y > CANVAS_HEIGHT) {
-          currentLives--; setLives(currentLives); pastries.splice(i, 1);
-          if (currentLives <= 0) { setGameStatus('over'); return; }
-        }
-      }
-      animationId = requestAnimationFrame(update);
-    };
-
-    const handleKeyDown = (e) => { if (e.key === 'ArrowLeft') doggy.movingLeft = true; if (e.key === 'ArrowRight') doggy.movingRight = true; };
-    const handleKeyUp = (e) => { if (e.key === 'ArrowLeft') doggy.movingLeft = false; if (e.key === 'ArrowRight') doggy.movingRight = false; };
-    window.addEventListener('keydown', handleKeyDown); window.addEventListener('keyup', handleKeyUp);
-    animationId = requestAnimationFrame(update);
-    return () => { cancelAnimationFrame(animationId); window.removeEventListener('keydown', handleKeyDown); window.removeEventListener('keyup', handleKeyUp); };
-  }, [gameStatus, lives]);
-
-  return (
-    <div className="min-h-screen bg-[#fefce8] flex flex-col items-center justify-center p-6 font-sans">
-      <div className="bg-white rounded-[3rem] shadow-2xl p-10 w-full max-w-xl text-center flex flex-col items-center">
-        <div className="flex items-center gap-3 mb-6">
-           <img src="85328.png" className="w-12 h-12 rounded-full object-cover" alt="Logo" />
-           <h1 className="text-4xl font-pacifico text-pink-500">Pastry Pup Game</h1>
+      const ArcadeMenu = ({ setView, onExit }) => (
+        <div className="flex min-h-screen flex-col items-center bg-[#FEFCE8] p-10">
+          <div className="mb-8 flex flex-col items-center gap-4 text-center sm:flex-row">
+            <img
+              src="85328.png"
+              className="h-20 w-20 rounded-full border-4 border-white object-cover shadow-lg"
+              alt="Logo"
+              onError={(e) => {
+                e.currentTarget.src = fallbackLogo;
+              }}
+            />
+            <h1 className="font-pacifico text-5xl text-pink-500 md:text-6xl">
+              Pastry Pup Arcade
+            </h1>
+          </div>
+          <div className="grid w-full max-w-6xl grid-cols-1 gap-8 md:grid-cols-3">
+            <ArcadeCard
+              title="Catching Treats"
+              icon="Game"
+              color="bg-pink-500"
+              desc="Move the pup to catch as many treats as you can."
+              onClick={() => setView("catching-treats")}
+            />
+            <ArcadeCard
+              title="Wings of Fire Persona"
+              icon="Quiz"
+              color="bg-orange-500"
+              desc="Discover your true dragon tribe from Pyrrhia."
+              onClick={() => setView("wof-quiz")}
+            />
+            <ArcadeCard
+              title="Disney Personality"
+              icon="Quiz"
+              color="bg-blue-500"
+              desc="Find out which classic Disney character you are."
+              onClick={() => setView("disney-quiz")}
+            />
+          </div>
+          <button
+            onClick={onExit}
+            className="mt-20 text-xl font-black text-slate-400 underline transition hover:text-pink-500"
+          >
+            Back to Bakery
+          </button>
         </div>
-        {gameStatus === 'start' && (
-          <div className="space-y-6">
-            <p className="text-xl font-bold text-slate-700">How many treats can you catch? 🐾</p>
-            <div className="flex flex-col gap-4">
-              <button onClick={() => startGame(5)} className="px-8 py-4 bg-pink-500 text-white rounded-2xl font-black text-xl hover:bg-pink-600 transition shadow-lg">Easy (5 Lives)</button>
-              <button onClick={() => startGame(3)} className="px-8 py-4 bg-purple-500 text-white rounded-2xl font-black text-xl hover:bg-purple-600 transition shadow-lg">Normal (3 Lives)</button>
-              <button onClick={() => startGame(1)} className="px-8 py-4 bg-red-500 text-white rounded-2xl font-black text-xl hover:bg-red-600 transition shadow-lg">Hard (1 Life)</button>
+      );
+
+      const ArcadeCard = ({ title, icon, color, desc, onClick }) => (
+        <button
+          onClick={onClick}
+          className="group flex flex-col items-center rounded-[3rem] bg-white p-10 text-center shadow-2xl transition hover:scale-105 active:scale-95"
+        >
+          <div
+            className={`mb-6 flex h-24 w-24 items-center justify-center rounded-3xl ${color} text-xl font-black text-white shadow-lg transition group-hover:rotate-3`}
+          >
+            {icon}
+          </div>
+          <h3 className="mb-4 text-2xl font-black">{title}</h3>
+          <p className="font-medium leading-relaxed text-slate-500">{desc}</p>
+        </button>
+      );
+
+      const PersonalityQuiz = ({ type, onExit }) => {
+        const [step, setStep] = useState(0);
+        const [scores, setScores] = useState({});
+        const [result, setResult] = useState(null);
+
+        const data = {
+          wof: {
+            title: "Wings of Fire Tribe Quiz",
+            questions: [
+              {
+                q: "What's your favorite environment?",
+                options: [
+                  { t: "SeaWing", a: "Deep, mysterious ocean" },
+                  { t: "RainWing", a: "Lush, sun-dappled rainforest" },
+                  { t: "SandWing", a: "Hot, golden desert" },
+                  { t: "NightWing", a: "Vast, starry night sky" },
+                  { t: "IceWing", a: "Crisp, frozen peaks" }
+                ]
+              },
+              {
+                q: "What's your best trait?",
+                options: [
+                  { t: "MudWing", a: "Fierce loyalty to family" },
+                  { t: "SkyWing", a: "Powerful, fast flight" },
+                  { t: "NightWing", a: "Hidden, deep intelligence" },
+                  { t: "RainWing", a: "Calm, peaceful nature" },
+                  { t: "IceWing", a: "Noble, cold elegance" }
+                ]
+              },
+              {
+                q: "Choose a special ability:",
+                options: [
+                  { t: "RainWing", a: "Magical camouflage scales" },
+                  { t: "SeaWing", a: "Seeing perfectly in dark water" },
+                  { t: "IceWing", a: "Frostbreath that freezes foes" },
+                  { t: "NightWing", a: "Reading minds or seeing the future" },
+                  { t: "SkyWing", a: "Flying faster than any other tribe" }
+                ]
+              }
+            ],
+            results: {
+              SeaWing:
+                "You are a SeaWing! You are a master of the water and find peace in the waves.",
+              RainWing:
+                "You are a RainWing! You are peaceful, vibrant, and full of hidden talents.",
+              NightWing:
+                "You are a NightWing! You are mysterious, wise, and highly observant.",
+              SkyWing:
+                "You are a SkyWing! You are powerful, fast, and a fierce protector.",
+              IceWing:
+                "You are an IceWing! You are noble, elegant, and cool under pressure.",
+              SandWing:
+                "You are a SandWing! You are clever, resilient, and resourceful.",
+              MudWing:
+                "You are a MudWing! You value family above all else and have incredible strength."
+            }
+          },
+          disney: {
+            title: "Disney Personality Quiz",
+            questions: [
+              {
+                q: "What do you value most?",
+                options: [
+                  { t: "Mulan", a: "Honor and protecting family" },
+                  { t: "Belle", a: "Learning and seeing the world" },
+                  { t: "Stitch", a: "Finding a place to belong" },
+                  { t: "Elsa", a: "Accepting yourself as you are" },
+                  { t: "Simba", a: "Leadership and following your heart" }
+                ]
+              },
+              {
+                q: "Pick an ideal sidekick:",
+                options: [
+                  { t: "Simba", a: "A funny pair of friends" },
+                  { t: "Mulan", a: "A tiny, feisty dragon" },
+                  { t: "Ariel", a: "A nervous but loyal fish" },
+                  { t: "Elsa", a: "A magical, friendly snowman" },
+                  { t: "Mickey", a: "A clumsy but sweet dog" }
+                ]
+              },
+              {
+                q: "Where would your dream home be?",
+                options: [
+                  { t: "Simba", a: "A vast, beautiful savannah" },
+                  { t: "Ariel", a: "A colorful underwater palace" },
+                  { t: "Elsa", a: "A sparkling, quiet ice castle" },
+                  { t: "Moana", a: "A tropical island by the sea" },
+                  { t: "Belle", a: "A cozy cottage full of books" }
+                ]
+              }
+            ],
+            results: {
+              Mulan:
+                "You are Mulan! You are courageous and define your destiny through strength and wits.",
+              Belle:
+                "You are Belle! You value the beauty of the mind and heart.",
+              Stitch:
+                "You are Stitch! You are unique, energetic, and fiercely loyal.",
+              Elsa:
+                "You are Elsa! You are powerful, composed, and learning to shine.",
+              Simba:
+                "You are Simba! You are brave and grow stronger through every challenge.",
+              Mickey:
+                "You are Mickey Mouse! You are optimistic and value your friends most.",
+              Ariel:
+                "You are Ariel! You are curious and always dreaming beyond the horizon.",
+              Moana:
+                "You are Moana! You follow the call of the ocean and are a natural voyager."
+            }
+          }
+        };
+
+        const currentQuiz = data[type];
+
+        const handleAnswer = (choice) => {
+          const newScores = { ...scores, [choice]: (scores[choice] || 0) + 1 };
+          setScores(newScores);
+          if (step + 1 < currentQuiz.questions.length) {
+            setStep(step + 1);
+          } else {
+            const winner = Object.keys(newScores).reduce((a, b) =>
+              newScores[a] > newScores[b] ? a : b
+            );
+            setResult(winner);
+          }
+        };
+
+        return (
+          <div className="flex min-h-screen items-center justify-center bg-[#FEFCE8] p-6">
+            <div className="w-full max-w-2xl rounded-[3rem] bg-white p-8 text-center shadow-2xl md:p-12">
+              {!result ? (
+                <>
+                  <h2 className="mb-10 text-4xl font-black text-pink-500">
+                    {currentQuiz.title}
+                  </h2>
+                  <div className="mb-4 text-xs font-black uppercase tracking-widest text-slate-400">
+                    Question {step + 1} of {currentQuiz.questions.length}
+                  </div>
+                  <p className="mb-8 text-2xl font-bold leading-tight text-slate-700">
+                    {currentQuiz.questions[step].q}
+                  </p>
+                  <div className="grid gap-4">
+                    {currentQuiz.questions[step].options.map((opt) => (
+                      <button
+                        key={opt.a}
+                        onClick={() => handleAnswer(opt.t)}
+                        className="rounded-2xl border-2 border-transparent bg-slate-50 p-5 text-xl font-bold text-slate-700 transition hover:border-pink-200 hover:bg-pink-100 active:scale-95"
+                      >
+                        {opt.a}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              ) : (
+                <>
+                  <h2 className="mb-2 text-3xl font-bold text-slate-500">
+                    Your match is...
+                  </h2>
+                  <h1 className="mb-6 text-6xl font-black text-pink-500">
+                    {result}!
+                  </h1>
+                  <p className="mx-auto mb-10 max-w-md text-xl font-medium leading-relaxed text-slate-600">
+                    {currentQuiz.results[result]}
+                  </p>
+                  <button
+                    onClick={onExit}
+                    className="rounded-3xl bg-pink-500 px-10 py-5 text-xl font-black text-white shadow-lg transition hover:bg-pink-600 active:scale-95"
+                  >
+                    Back to Arcade
+                  </button>
+                </>
+              )}
             </div>
           </div>
-        )}
-        {gameStatus === 'playing' && (
-          <div className="w-full space-y-4">
-            <div className="flex justify-between w-full font-black text-pink-500 text-xl"><span>Score: {score}</span><span>Level: {level}</span><span>Lives: {'❤️'.repeat(lives)}</span></div>
-            <canvas ref={canvasRef} width={500} height={400} className="bg-sky-50 border-4 border-pink-100 rounded-3xl w-full shadow-inner" />
-            <p className="text-sm text-slate-400 font-bold">Use Arrow Keys! 🐾</p>
-          </div>
-        )}
-        {gameStatus === 'over' && (
-          <div className="space-y-6">
-            <h2 className="text-6xl font-black text-red-500">Game Over!</h2>
-            <p className="text-3xl font-black text-slate-800">Score: {score}</p>
-            <button onClick={() => setGameStatus('start')} className="px-10 py-5 bg-pink-500 text-white rounded-3xl font-black text-2xl shadow-xl hover:bg-pink-600">Try Again</button>
-          </div>
-        )}
-        <button onClick={onExit} className="mt-8 text-slate-400 font-bold hover:text-pink-500 transition underline">Exit to Arcade</button>
-      </div>
-    </div>
-  );
-};
+        );
+      };
 
-export default App;
+      const CatchingTreatsGame = ({ onExit }) => {
+        const canvasRef = useRef(null);
+        const [score, setScore] = useState(0);
+        const [level, setLevel] = useState(1);
+        const [lives, setLives] = useState(0);
+        const [gameStatus, setGameStatus] = useState("start");
+
+        const startGame = (startingLives) => {
+          setLives(startingLives);
+          setScore(0);
+          setLevel(1);
+          setGameStatus("playing");
+        };
+
+        useEffect(() => {
+          if (gameStatus !== "playing") return undefined;
+          const canvas = canvasRef.current;
+          const ctx = canvas.getContext("2d");
+          const width = 500;
+          const height = 400;
+          const pupSize = 50;
+          const pastrySize = 30;
+          const pastries = [];
+          const doggy = {
+            x: 225,
+            y: 340,
+            speed: 10,
+            movingLeft: false,
+            movingRight: false
+          };
+          const pastryNames = ["Cookie", "Cupcake", "Donut", "Cake", "Croissant"];
+          let currentScore = 0;
+          let currentLives = lives;
+          let currentLevel = 1;
+          let animationId;
+          let lastSpawnTime = 0;
+
+          const spawn = () => {
+            pastries.push({
+              x: Math.random() * (width - pastrySize),
+              y: -pastrySize,
+              label: pastryNames[Math.floor(Math.random() * pastryNames.length)],
+              speed: 3 + currentLevel * 0.5
+            });
+          };
+
+          const update = (time) => {
+            const spawnRate = Math.max(200, 1000 - currentLevel * 100);
+            if (time - lastSpawnTime > spawnRate) {
+              spawn();
+              lastSpawnTime = time;
+            }
+            ctx.clearRect(0, 0, width, height);
+            if (doggy.movingLeft) doggy.x -= doggy.speed;
+            if (doggy.movingRight) doggy.x += doggy.speed;
+            doggy.x = Math.max(0, Math.min(width - pupSize, doggy.x));
+
+            ctx.fillStyle = "#f9a8d4";
+            ctx.beginPath();
+            ctx.arc(doggy.x + 25, doggy.y + 25, 25, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = "#831843";
+            ctx.font = "bold 14px Inter";
+            ctx.fillText("Pup", doggy.x + 12, doggy.y + 31);
+
+            for (let i = pastries.length - 1; i >= 0; i -= 1) {
+              pastries[i].y += pastries[i].speed;
+              ctx.fillStyle = "#fed7aa";
+              ctx.beginPath();
+              ctx.arc(pastries[i].x + 15, pastries[i].y + 15, 15, 0, Math.PI * 2);
+              ctx.fill();
+              ctx.fillStyle = "#7c2d12";
+              ctx.font = "bold 10px Inter";
+              ctx.fillText(pastries[i].label.slice(0, 4), pastries[i].x + 3, pastries[i].y + 19);
+
+              const caught =
+                pastries[i].x < doggy.x + pupSize &&
+                pastries[i].x + pastrySize > doggy.x &&
+                pastries[i].y < doggy.y + pupSize &&
+                pastries[i].y + pastrySize > doggy.y;
+
+              if (caught) {
+                currentScore += 1;
+                setScore(currentScore);
+                pastries.splice(i, 1);
+                if (currentScore % 20 === 0) {
+                  currentLevel += 1;
+                  setLevel(currentLevel);
+                }
+              } else if (pastries[i].y > height) {
+                currentLives -= 1;
+                setLives(currentLives);
+                pastries.splice(i, 1);
+                if (currentLives <= 0) {
+                  setGameStatus("over");
+                  return;
+                }
+              }
+            }
+            animationId = requestAnimationFrame(update);
+          };
+
+          const handleKeyDown = (e) => {
+            if (e.key === "ArrowLeft") doggy.movingLeft = true;
+            if (e.key === "ArrowRight") doggy.movingRight = true;
+          };
+          const handleKeyUp = (e) => {
+            if (e.key === "ArrowLeft") doggy.movingLeft = false;
+            if (e.key === "ArrowRight") doggy.movingRight = false;
+          };
+
+          window.addEventListener("keydown", handleKeyDown);
+          window.addEventListener("keyup", handleKeyUp);
+          animationId = requestAnimationFrame(update);
+          return () => {
+            cancelAnimationFrame(animationId);
+            window.removeEventListener("keydown", handleKeyDown);
+            window.removeEventListener("keyup", handleKeyUp);
+          };
+        }, [gameStatus, lives]);
+
+        return (
+          <div className="flex min-h-screen flex-col items-center justify-center bg-[#fefce8] p-6">
+            <div className="flex w-full max-w-xl flex-col items-center rounded-[3rem] bg-white p-10 text-center shadow-2xl">
+              <h1 className="font-pacifico mb-6 text-4xl text-pink-500">
+                Pastry Pup Game
+              </h1>
+              {gameStatus === "start" && (
+                <div className="space-y-6">
+                  <p className="text-xl font-bold text-slate-700">
+                    How many treats can you catch?
+                  </p>
+                  <div className="flex flex-col gap-4">
+                    <button
+                      onClick={() => startGame(5)}
+                      className="rounded-2xl bg-pink-500 px-8 py-4 text-xl font-black text-white shadow-lg transition hover:bg-pink-600"
+                    >
+                      Easy (5 Lives)
+                    </button>
+                    <button
+                      onClick={() => startGame(3)}
+                      className="rounded-2xl bg-purple-500 px-8 py-4 text-xl font-black text-white shadow-lg transition hover:bg-purple-600"
+                    >
+                      Normal (3 Lives)
+                    </button>
+                    <button
+                      onClick={() => startGame(1)}
+                      className="rounded-2xl bg-red-500 px-8 py-4 text-xl font-black text-white shadow-lg transition hover:bg-red-600"
+                    >
+                      Hard (1 Life)
+                    </button>
+                  </div>
+                </div>
+              )}
+              {gameStatus === "playing" && (
+                <div className="w-full space-y-4">
+                  <div className="flex w-full justify-between text-xl font-black text-pink-500">
+                    <span>Score: {score}</span>
+                    <span>Level: {level}</span>
+                    <span>Lives: {lives}</span>
+                  </div>
+                  <canvas
+                    ref={canvasRef}
+                    width="500"
+                    height="400"
+                    className="w-full rounded-3xl border-4 border-pink-100 bg-sky-50 shadow-inner"
+                  />
+                  <p className="text-sm font-bold text-slate-400">
+                    Use the left and right arrow keys.
+                  </p>
+                </div>
+              )}
+              {gameStatus === "over" && (
+                <div className="space-y-6">
+                  <h2 className="text-6xl font-black text-red-500">Game Over!</h2>
+                  <p className="text-3xl font-black text-slate-800">Score: {score}</p>
+                  <button
+                    onClick={() => setGameStatus("start")}
+                    className="rounded-3xl bg-pink-500 px-10 py-5 text-2xl font-black text-white shadow-xl hover:bg-pink-600"
+                  >
+                    Try Again
+                  </button>
+                </div>
+              )}
+              <button
+                onClick={onExit}
+                className="mt-8 font-bold text-slate-400 underline transition hover:text-pink-500"
+              >
+                Exit to Arcade
+              </button>
+            </div>
+          </div>
+        );
+      };
+
+      createRoot(document.getElementById("root")).render(<App />);
+    </script>
+  </body>
+</html>
