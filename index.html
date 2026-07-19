@@ -1489,8 +1489,9 @@
             if (r < 0.30) ob = { kind: "fork",   w: 26, h: 62, y: groundY, fly: false };
             else if (r < 0.55) ob = { kind: "spoon", w: 26, h: 52, y: groundY, fly: false };
             else if (r < 0.75) ob = { kind: "knife", w: 22, h: 70, y: groundY, fly: false };
-            else if (r < 0.88) ob = { kind: "ketchup", w: 34, h: 26, y: groundY - 58, fly: true };
-            else ob = { kind: "mustard", w: 34, h: 26, y: groundY - 58, fly: true };
+            // Low enough to hit a standing player, but high enough to duck under.
+            else if (r < 0.88) ob = { kind: "ketchup", w: 34, h: 26, y: groundY - 30, fly: true };
+            else ob = { kind: "mustard", w: 34, h: 26, y: groundY - 30, fly: true };
             ob.x = W + 40;
             ob.scored = false;
             state.obstacles.push(ob);
@@ -1507,6 +1508,14 @@
 
           useEffect(() => {
             const down = (e) => {
+              const target = e.target;
+              if (
+                target instanceof HTMLInputElement ||
+                target instanceof HTMLTextAreaElement ||
+                target?.isContentEditable
+              ) {
+                return;
+              }
               const k = e.key.toLowerCase();
               if (screen !== "play" && (k === " " || k === "enter")) { startGame(); return; }
               if (k === "arrowup" || k === "w" || k === " ") { e.preventDefault(); jump(); }
@@ -1724,13 +1733,13 @@
                   {/* purple d-pad */}
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 46px)", gridTemplateRows: "repeat(3, 46px)", gap: 2 }}>
                     <div />
-                    <CtlBtn label="\u25B2" onTap={jump} style={{ gridColumn: 2 }} />
+                    <CtlBtn label={"\u25B2"} onTap={jump} style={{ gridColumn: 2 }} />
                     <div />
-                    <CtlBtn label="\u25C0" onDown={() => press("left", true)} onUp={() => press("left", false)} />
+                    <CtlBtn label={"\u25C0"} onDown={() => press("left", true)} onUp={() => press("left", false)} />
                     <div style={{ background: PURPLE, border: `3px solid ${INK}`, borderRadius: 6 }} />
-                    <CtlBtn label="\u25B6" onDown={() => press("right", true)} onUp={() => press("right", false)} />
+                    <CtlBtn label={"\u25B6"} onDown={() => press("right", true)} onUp={() => press("right", false)} />
                     <div />
-                    <CtlBtn label="\u25BC" onDown={() => press("duck", true)} onUp={() => press("duck", false)} style={{ gridColumn: 2 }} />
+                    <CtlBtn label={"\u25BC"} onDown={() => press("duck", true)} onUp={() => press("duck", false)} style={{ gridColumn: 2 }} />
                     <div />
                   </div>
 
