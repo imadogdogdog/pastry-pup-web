@@ -852,14 +852,26 @@
             if (e.key === "ArrowLeft") doggy.movingLeft = false;
             if (e.key === "ArrowRight") doggy.movingRight = false;
           };
+          const moveCatcherToTouch = (event) => {
+            const touch = event.touches[0];
+            if (!touch) return;
+            event.preventDefault();
+            const rect = canvas.getBoundingClientRect();
+            const touchX = ((touch.clientX - rect.left) / rect.width) * width;
+            doggy.x = Math.max(0, Math.min(width - pupSize, touchX - pupSize / 2));
+          };
 
           window.addEventListener("keydown", handleKeyDown);
           window.addEventListener("keyup", handleKeyUp);
+          canvas.addEventListener("touchstart", moveCatcherToTouch, { passive: false });
+          canvas.addEventListener("touchmove", moveCatcherToTouch, { passive: false });
           animationId = requestAnimationFrame(update);
           return () => {
             cancelAnimationFrame(animationId);
             window.removeEventListener("keydown", handleKeyDown);
             window.removeEventListener("keyup", handleKeyUp);
+            canvas.removeEventListener("touchstart", moveCatcherToTouch);
+            canvas.removeEventListener("touchmove", moveCatcherToTouch);
           };
         }, [gameStatus, lives]);
 
@@ -908,9 +920,10 @@
                     width="500"
                     height="400"
                     className="w-full rounded-3xl border-4 border-pink-100 bg-sky-50 shadow-inner"
+                    style={{ touchAction: "none" }}
                   />
                   <p className="text-sm font-bold text-slate-400">
-                    Use the left and right arrow keys.
+                    Drag the pup left and right on the game screen, or use the arrow keys.
                   </p>
                 </div>
               )}
@@ -1383,11 +1396,29 @@
           });
           const [nicknameDraft, setNicknameDraft] = useState(nickname);
           const [savedScore, setSavedScore] = useState(false);
+          const [isFullscreen, setIsFullscreen] = useState(false);
 
           const g = useRef(null);
           const keys = useRef({});
           const lastT = useRef(0);
           const rafRef = useRef();
+          const gameShellRef = useRef(null);
+
+          useEffect(() => {
+            const updateFullscreen = () => setIsFullscreen(!!document.fullscreenElement);
+            document.addEventListener("fullscreenchange", updateFullscreen);
+            return () => document.removeEventListener("fullscreenchange", updateFullscreen);
+          }, []);
+
+          const toggleFullscreen = () => {
+            if (document.fullscreenElement) {
+              document.exitFullscreen?.();
+              return;
+            }
+            const shell = gameShellRef.current;
+            const request = shell?.requestFullscreen || shell?.webkitRequestFullscreen;
+            if (request) request.call(shell)?.catch?.(() => {});
+          };
 
           useEffect(() => {
             if (!db) return;
@@ -1573,8 +1604,12 @@
               for (const o of s.obstacles) {
                 const ox = o.x, oy = o.y - o.h, ow = o.w, oh = o.h;
                 const pad = 6; // forgiving hitbox
-                if (px + pad < ox + ow - pad && px + pw - pad > ox + pad &&
-                    py + pad < oy + oh - pad && py + ph - pad > oy + pad) {
+                const overlapsX = px + pad < ox + ow - pad && px + pw - pad > ox + pad;
+                const overlapsY = py + pad < oy + oh - pad && py + ph - pad > oy + pad;
+                // Flying condiments are duck-under hazards: jumping does not clear them.
+                const hitCondiment = o.fly && overlapsX && !s.ducking;
+                const hitUtensil = !o.fly && overlapsX && overlapsY;
+                if (hitCondiment || hitUtensil) {
                   s.dead = true;
                   setBest((b) => Math.max(b, Math.floor(s.score)));
                   setTimeout(() => setScreen("over"), 700);
@@ -1643,6 +1678,7 @@
           };
 
           const s = g.current;
+          const controlSize = "clamp(38px, 12vw, 46px)";
 
           // ===== on-screen controls =====
           const CtlBtn = ({ label, style, onDown, onUp, onTap }) => {
@@ -1654,7 +1690,7 @@
                   onMouseDown: onDown, onMouseUp: onUp, onMouseLeave: onUp,
                 };
             return <button {...hs} style={{
-              fontFamily: font, fontWeight: 700, fontSize: 15, color: "#fff",
+              fontFamily: font, fontWeight: 700, fontSize: "clamp(13px, 4vw, 15px)", color: "#fff",
               background: PURPLE, border: `3px solid ${INK}`, borderRadius: 12,
               boxShadow: `2px 2px 0 ${INK}`, touchAction: "none", userSelect: "none",
               WebkitUserSelect: "none", cursor: "pointer", padding: 0, ...style,
@@ -1663,13 +1699,28 @@
 
           return (
             <div style={{
-              minHeight: "100vh", background: "#2a2a2e", display: "flex",
-              alignItems: "center", justifyContent: "center", padding: 10, fontFamily: font,
-            }}>
+              width: "100%", minHeight: "100dvh", height: "100dvh", boxSizing: "border-box", background: "#2a2a2e", display: "flex",
+              alignItems: "center", justifyContent: "center", padding: "clamp(6px, 2vw, 12px)",
+              overflowY: "auto", fontFamily: font,
+            }} ref={gameShellRef}>
+              <button
+                type="button"
+                onClick={toggleFullscreen}
+                aria-label={isFullscreen ? "Exit full screen" : "Enter full screen"}
+                style={{
+                  position: "fixed", right: 12, bottom: 12, zIndex: 20,
+                  border: `3px solid ${INK}`, borderRadius: 10, background: PAPER,
+                  color: INK, padding: "7px 10px", fontFamily: font, fontWeight: 700,
+                  fontSize: 12, cursor: "pointer", boxShadow: `2px 2px 0 ${INK}`,
+                }}
+              >
+                {isFullscreen ? "exit full screen" : "full screen"}
+              </button>
               {/* ===== Paper Game Boy console, like the drawing ===== */}
               <div style={{
                 background: PAPER, border: `4px solid ${INK}`, borderRadius: "18px 18px 26px 26px",
-                padding: "12px 12px 16px", width: "min(96vw, 430px)",
+                boxSizing: "border-box", padding: "clamp(8px, 3vw, 12px) clamp(8px, 3vw, 12px) clamp(12px, 4vw, 16px)",
+                width: "min(100%, 520px)",
                 boxShadow: "6px 8px 0 rgba(0,0,0,0.45)",
               }}>
                 {/* screen bezel with theater curtains */}
@@ -1729,9 +1780,9 @@
                 </div>
 
                 {/* ===== console controls, like the drawing ===== */}
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 14, gap: 10 }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: "clamp(10px, 3vw, 14px)", gap: "clamp(8px, 3vw, 14px)" }}>
                   {/* purple d-pad */}
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 46px)", gridTemplateRows: "repeat(3, 46px)", gap: 2 }}>
+                  <div style={{ display: "grid", gridTemplateColumns: `repeat(3, ${controlSize})`, gridTemplateRows: `repeat(3, ${controlSize})`, gap: "clamp(1px, 0.6vw, 2px)", flexShrink: 0 }}>
                     <div />
                     <CtlBtn label={"\u25B2"} onTap={jump} style={{ gridColumn: 2 }} />
                     <div />
@@ -1744,23 +1795,23 @@
                   </div>
 
                   {/* start pill + green speaker */}
-                  <div style={{ display: "flex", flexDirection: "column", gap: 10, alignItems: "center" }}>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "clamp(7px, 2vw, 10px)", alignItems: "center", minWidth: 0 }}>
                     <button onClick={startGame} style={{
-                      fontFamily: font, fontWeight: 700, fontSize: 16, color: "#fff",
+                      fontFamily: font, fontWeight: 700, fontSize: "clamp(14px, 4vw, 16px)", color: "#fff",
                       background: BLUE, border: `3px solid ${INK}`, borderRadius: 20,
-                      padding: "8px 26px", boxShadow: `2px 2px 0 ${INK}`, cursor: "pointer",
+                      padding: "8px clamp(16px, 7vw, 26px)", boxShadow: `2px 2px 0 ${INK}`, cursor: "pointer",
                       transform: "rotate(-1deg)",
                     }}>{screen === "play" ? "restart" : "Start!"}</button>
                     {/* green speaker grille with the :0! face, like the drawing */}
                     <div style={{
                       background: MELON_GREEN, border: `3px solid ${INK}`, borderRadius: 8,
-                      padding: "6px 14px", fontFamily: font, fontWeight: 700, fontSize: 18,
+                      padding: "6px clamp(10px, 4vw, 14px)", fontFamily: font, fontWeight: 700, fontSize: "clamp(15px, 4.5vw, 18px)",
                       color: INK, letterSpacing: 3, transform: "rotate(1deg)",
                     }}>: 0 !</div>
                   </div>
                 </div>
 
-                <div style={{ textAlign: "center", marginTop: 10, fontSize: 12, color: "#666", fontFamily: font }}>
+                <div style={{ textAlign: "center", marginTop: 10, fontSize: "clamp(10px, 3.2vw, 12px)", color: "#666", fontFamily: font }}>
                   keyboard: left/right move | up/space jump | down duck
                 </div>
                 {screen === "over" && !nickname && (
@@ -1822,13 +1873,16 @@
                       padding: 10,
                       background: "#fff",
                       border: `3px solid ${INK}`,
-                      borderRadius: 12
+                      borderRadius: 12,
+                      maxHeight: "min(22dvh, 190px)",
+                      overflowY: "auto",
+                      WebkitOverflowScrolling: "touch"
                     }}
                   >
                     <div style={{ textAlign: "center", fontWeight: 700, color: PURPLE }}>
                       Top Watermelon Jumpers
                     </div>
-                    <ol style={{ margin: "8px 0 0", paddingLeft: 28, fontSize: 13 }}>
+                    <ol style={{ margin: "8px 0 0", paddingLeft: 28, fontSize: "clamp(12px, 3.5vw, 13px)" }}>
                       {leaderboard.map((entry) => (
                         <li key={entry.id}>
                           <span style={{ fontWeight: 700 }}>{entry.name || "Player"}</span>
