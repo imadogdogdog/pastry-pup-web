@@ -176,6 +176,8 @@
               return <ArcadeMenu setView={setView} onExit={() => setView("home")} />;
             case "catching-treats":
               return <CatchingTreatsGame onExit={() => setView("arcade")} />;
+            case "treat-tap-revolution":
+              return <TreatTapRevolution onExit={() => setView("arcade")} />;
             case "wof-quiz":
               return <PersonalityQuiz type="wof" onExit={() => setView("arcade")} />;
             case "disney-quiz":
@@ -550,6 +552,13 @@
               desc="Jump over utensils and duck under flying condiments."
               onClick={() => setView("watermelon-jump")}
             />
+            <ArcadeCard
+              title="Treat Tap Revolution"
+              icon={"\u{1F3B5}"}
+              color="bg-fuchsia-500"
+              desc="Tap to the beat with one hand—or tackle two-hand patterns."
+              onClick={() => setView("treat-tap-revolution")}
+            />
           </div>
           <button
             onClick={onExit}
@@ -783,6 +792,7 @@
             movingRight: false
           };
           const pastryEmojis = ["🍪", "🧁", "🍩", "🍰", "🥐", "🐾", "🥨"];
+          const bugEmojis = ["\u{1F41B}", "\u{1FAB2}", "\u{1F577}\uFE0F"];
           let currentScore = 0;
           let currentLives = lives;
           let currentLevel = 1;
@@ -790,10 +800,14 @@
           let lastSpawnTime = 0;
 
           const spawn = () => {
+            const isBug = Math.random() < Math.min(0.14 + currentLevel * 0.025, 0.32);
             pastries.push({
               x: Math.random() * (width - pastrySize),
               y: -pastrySize,
-              emoji: pastryEmojis[Math.floor(Math.random() * pastryEmojis.length)],
+              emoji: isBug
+                ? bugEmojis[Math.floor(Math.random() * bugEmojis.length)]
+                : pastryEmojis[Math.floor(Math.random() * pastryEmojis.length)],
+              isBug,
               speed: 3 + currentLevel * 0.5
             });
           };
@@ -824,20 +838,33 @@
                 pastries[i].y + pastrySize > doggy.y;
 
               if (caught) {
-                currentScore += 1;
-                setScore(currentScore);
+                const caughtBug = pastries[i].isBug;
                 pastries.splice(i, 1);
-                if (currentScore % 20 === 0) {
-                  currentLevel += 1;
-                  setLevel(currentLevel);
+                if (caughtBug) {
+                  currentLives -= 1;
+                  setLives(currentLives);
+                  if (currentLives <= 0) {
+                    setGameStatus("over");
+                    return;
+                  }
+                } else {
+                  currentScore += 1;
+                  setScore(currentScore);
+                  if (currentScore % 20 === 0) {
+                    currentLevel += 1;
+                    setLevel(currentLevel);
+                  }
                 }
               } else if (pastries[i].y > height) {
-                currentLives -= 1;
-                setLives(currentLives);
+                const avoidedBug = pastries[i].isBug;
                 pastries.splice(i, 1);
-                if (currentLives <= 0) {
-                  setGameStatus("over");
-                  return;
+                if (!avoidedBug) {
+                  currentLives -= 1;
+                  setLives(currentLives);
+                  if (currentLives <= 0) {
+                    setGameStatus("over");
+                    return;
+                  }
                 }
               }
             }
@@ -873,7 +900,7 @@
             canvas.removeEventListener("touchstart", moveCatcherToTouch);
             canvas.removeEventListener("touchmove", moveCatcherToTouch);
           };
-        }, [gameStatus, lives]);
+        }, [gameStatus]);
 
         return (
           <div className="flex min-h-screen flex-col items-center justify-center bg-[#fefce8] p-6">
@@ -885,6 +912,9 @@
                 <div className="space-y-6">
                   <p className="text-xl font-bold text-slate-700">
                     How many treats can you catch?
+                  </p>
+                  <p className="rounded-2xl bg-sky-50 p-4 font-bold leading-relaxed text-slate-600">
+                    Catch pastries with the pup. Avoid bugs—they cost one life. Missing a treat also costs one life. Drag on phones or use the arrow keys.
                   </p>
                   <div className="flex flex-col gap-4">
                     <button
@@ -945,6 +975,270 @@
               >
                 Exit to Arcade
               </button>
+            </div>
+          </div>
+        );
+      };
+
+      const TreatTapRevolution = ({ onExit }) => {
+        const canvasRef = useRef(null);
+        const audioRef = useRef(null);
+        const [gameStatus, setGameStatus] = useState("start");
+        const [difficulty, setDifficulty] = useState("easy");
+        const [score, setScore] = useState(0);
+        const [combo, setCombo] = useState(0);
+        const [bestCombo, setBestCombo] = useState(0);
+        const [lives, setLives] = useState(5);
+
+        const modes = {
+          easy: { label: "Easy", hands: "1 hand", lanes: 2, bpm: 100, lives: 6, chords: false },
+          normal: { label: "Normal", hands: "1 hand", lanes: 3, bpm: 116, lives: 5, chords: false },
+          hard: { label: "Hard", hands: "2 hands", lanes: 4, bpm: 132, lives: 4, chords: true }
+        };
+
+        const stopMusic = () => {
+          const audio = audioRef.current;
+          audioRef.current = null;
+          if (audio && audio.state !== "closed") audio.close().catch(() => {});
+        };
+
+        useEffect(() => () => stopMusic(), []);
+
+        const startGame = (mode) => {
+          stopMusic();
+          const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+          if (AudioContextClass) {
+            const audio = new AudioContextClass();
+            audio.resume().catch(() => {});
+            audioRef.current = audio;
+          }
+          setDifficulty(mode);
+          setScore(0);
+          setCombo(0);
+          setBestCombo(0);
+          setLives(modes[mode].lives);
+          setGameStatus("playing");
+        };
+
+        useEffect(() => {
+          if (gameStatus !== "playing") return undefined;
+          const canvas = canvasRef.current;
+          const ctx = canvas.getContext("2d");
+          const width = 480;
+          const height = 560;
+          const targetY = height - 92;
+          const travelTime = 1900;
+          const hitWindow = difficulty === "hard" ? 145 : 185;
+          const mode = modes[difficulty];
+          const beatMs = 60000 / mode.bpm;
+          const totalBeats = 52;
+          const laneColors = ["#fb7185", "#a78bfa", "#38bdf8", "#fbbf24"];
+          const notes = [];
+          let elapsed = 0;
+          let animationId;
+          let currentScore = 0;
+          let currentCombo = 0;
+          let currentBest = 0;
+          let currentLives = mode.lives;
+          let lastMusicBeat = -1;
+          const startTime = performance.now();
+
+          for (let beat = 4; beat < totalBeats; beat += 1) {
+            const firstLane = Math.floor(Math.random() * mode.lanes);
+            notes.push({ lane: firstLane, hitTime: beat * beatMs, hit: false, missed: false });
+            if (mode.chords && beat % 4 === 2) {
+              let secondLane = Math.floor(Math.random() * mode.lanes);
+              if (secondLane === firstLane) secondLane = (secondLane + 2) % mode.lanes;
+              notes.push({ lane: secondLane, hitTime: beat * beatMs, hit: false, missed: false });
+            }
+          }
+
+          const playTone = (frequency, duration, type = "sine", volume = 0.05) => {
+            const audio = audioRef.current;
+            if (!audio || audio.state === "closed") return;
+            const oscillator = audio.createOscillator();
+            const gain = audio.createGain();
+            oscillator.type = type;
+            oscillator.frequency.value = frequency;
+            gain.gain.setValueAtTime(volume, audio.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.001, audio.currentTime + duration);
+            oscillator.connect(gain);
+            gain.connect(audio.destination);
+            oscillator.start();
+            oscillator.stop(audio.currentTime + duration);
+          };
+
+          const playMusicBeat = (beat) => {
+            const melody = [261.63, 329.63, 392, 523.25, 392, 329.63, 293.66, 349.23];
+            playTone(melody[beat % melody.length], 0.16, "triangle", 0.045);
+            if (beat % 4 === 0) playTone(130.81, 0.22, "sine", 0.07);
+            if (beat % 2 === 1) playTone(880, 0.045, "square", 0.012);
+          };
+
+          const finishGame = () => {
+            setGameStatus("over");
+            stopMusic();
+          };
+
+          const hitLane = (lane) => {
+            const candidate = notes
+              .filter((note) => !note.hit && !note.missed && note.lane === lane && Math.abs(note.hitTime - elapsed) <= hitWindow)
+              .sort((a, b) => Math.abs(a.hitTime - elapsed) - Math.abs(b.hitTime - elapsed))[0];
+            if (!candidate) {
+              currentCombo = 0;
+              setCombo(0);
+              return;
+            }
+            candidate.hit = true;
+            currentCombo += 1;
+            currentBest = Math.max(currentBest, currentCombo);
+            currentScore += 100 + Math.min(400, currentCombo * 10);
+            setCombo(currentCombo);
+            setBestCombo(currentBest);
+            setScore(currentScore);
+            playTone(520 + lane * 85, 0.1, "sine", 0.075);
+          };
+
+          const handlePointerDown = (event) => {
+            event.preventDefault();
+            const rect = canvas.getBoundingClientRect();
+            const pointerX = ((event.clientX - rect.left) / rect.width) * width;
+            const lane = Math.max(0, Math.min(mode.lanes - 1, Math.floor(pointerX / (width / mode.lanes))));
+            hitLane(lane);
+          };
+
+          const handleKeyDown = (event) => {
+            const laneKeys = mode.lanes === 2 ? ["f", "j"] : mode.lanes === 3 ? ["d", "f", "j"] : ["d", "f", "j", "k"];
+            const lane = laneKeys.indexOf(event.key.toLowerCase());
+            if (lane >= 0 && !event.repeat) {
+              event.preventDefault();
+              hitLane(lane);
+            }
+          };
+
+          const draw = (time) => {
+            elapsed = time - startTime;
+            const musicBeat = Math.floor(elapsed / beatMs);
+            if (musicBeat !== lastMusicBeat) {
+              lastMusicBeat = musicBeat;
+              playMusicBeat(musicBeat);
+            }
+
+            ctx.clearRect(0, 0, width, height);
+            const gradient = ctx.createLinearGradient(0, 0, 0, height);
+            gradient.addColorStop(0, "#312e81");
+            gradient.addColorStop(1, "#701a75");
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, width, height);
+
+            const laneWidth = width / mode.lanes;
+            for (let lane = 0; lane < mode.lanes; lane += 1) {
+              ctx.fillStyle = lane % 2 ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.08)";
+              ctx.fillRect(lane * laneWidth, 0, laneWidth, height);
+              ctx.strokeStyle = "rgba(255,255,255,0.22)";
+              ctx.lineWidth = 2;
+              ctx.strokeRect(lane * laneWidth, 0, laneWidth, height);
+              ctx.fillStyle = laneColors[lane];
+              ctx.globalAlpha = 0.45;
+              ctx.fillRect(lane * laneWidth + 8, targetY - 10, laneWidth - 16, 20);
+              ctx.globalAlpha = 1;
+              ctx.fillStyle = "#fff";
+              ctx.font = "bold 20px Inter, sans-serif";
+              ctx.textAlign = "center";
+              const laneLabels = mode.lanes === 2 ? ["F", "J"] : mode.lanes === 3 ? ["D", "F", "J"] : ["D", "F", "J", "K"];
+              ctx.fillText(laneLabels[lane], lane * laneWidth + laneWidth / 2, height - 28);
+            }
+
+            for (const note of notes) {
+              if (note.hit || note.missed) continue;
+              const y = targetY - ((note.hitTime - elapsed) / travelTime) * targetY;
+              if (y < -40 || y > height + 40) continue;
+              const x = note.lane * laneWidth + laneWidth / 2;
+              ctx.beginPath();
+              ctx.arc(x, y, Math.min(30, laneWidth * 0.28), 0, Math.PI * 2);
+              ctx.fillStyle = laneColors[note.lane];
+              ctx.fill();
+              ctx.strokeStyle = "#fff";
+              ctx.lineWidth = 4;
+              ctx.stroke();
+              ctx.fillStyle = "#fff";
+              ctx.font = "22px serif";
+              ctx.textAlign = "center";
+              ctx.fillText("\u{1F36A}", x, y + 8);
+            }
+
+            for (const note of notes) {
+              if (!note.hit && !note.missed && elapsed > note.hitTime + hitWindow) {
+                note.missed = true;
+                currentLives -= 1;
+                currentCombo = 0;
+                setLives(currentLives);
+                setCombo(0);
+                if (currentLives <= 0) {
+                  finishGame();
+                  return;
+                }
+              }
+            }
+
+            if (elapsed > totalBeats * beatMs + 800) {
+              finishGame();
+              return;
+            }
+            animationId = requestAnimationFrame(draw);
+          };
+
+          canvas.addEventListener("pointerdown", handlePointerDown);
+          window.addEventListener("keydown", handleKeyDown);
+          animationId = requestAnimationFrame(draw);
+          return () => {
+            cancelAnimationFrame(animationId);
+            canvas.removeEventListener("pointerdown", handlePointerDown);
+            window.removeEventListener("keydown", handleKeyDown);
+          };
+        }, [gameStatus, difficulty]);
+
+        const exitGame = () => {
+          stopMusic();
+          onExit();
+        };
+
+        return (
+          <div className="flex min-h-[100dvh] flex-col items-center justify-center bg-gradient-to-b from-indigo-950 via-purple-900 to-fuchsia-900 p-4 text-white">
+            <div className="w-full max-w-xl rounded-[2.5rem] border-4 border-fuchsia-300 bg-slate-950/80 p-5 text-center shadow-2xl sm:p-8">
+              <h1 className="font-pacifico mb-3 text-4xl text-pink-300 sm:text-5xl">Treat Tap Revolution</h1>
+              {gameStatus === "start" && (
+                <div className="space-y-5">
+                  <p className="rounded-2xl bg-white/10 p-4 font-bold leading-relaxed text-purple-100">
+                    Tap each lane when its treat reaches the glowing bar. Easy and Normal use one-finger patterns. Hard adds two-note chords—use two fingers together. Turn your sound on!
+                  </p>
+                  <div className="grid gap-3 sm:grid-cols-3">
+                    {Object.entries(modes).map(([key, mode]) => (
+                      <button key={key} onClick={() => startGame(key)} className="rounded-2xl bg-fuchsia-500 px-4 py-4 font-black shadow-lg transition hover:bg-fuchsia-400 active:scale-95">
+                        {mode.label}<span className="mt-1 block text-xs text-fuchsia-100">{mode.hands} · {mode.bpm} BPM</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {gameStatus === "playing" && (
+                <div className="space-y-3">
+                  <div className="grid grid-cols-3 gap-2 font-black text-pink-200">
+                    <span>Score {score}</span><span>Combo {combo}</span><span>Lives {lives}</span>
+                  </div>
+                  <canvas ref={canvasRef} width="480" height="560" className="mx-auto block max-h-[72dvh] w-full rounded-3xl border-4 border-fuchsia-300 shadow-2xl" style={{ touchAction: "none", aspectRatio: "6 / 7" }} />
+                  <p className="text-sm font-bold text-purple-200">Tap the lanes—or use {modes[difficulty].lanes === 2 ? "F / J" : modes[difficulty].lanes === 3 ? "D / F / J" : "D / F / J / K"}.</p>
+                </div>
+              )}
+              {gameStatus === "over" && (
+                <div className="space-y-5">
+                  <h2 className="text-4xl font-black text-pink-300">Song Complete!</h2>
+                  <p className="text-2xl font-black">Score: {score}</p>
+                  <p className="font-bold text-purple-200">Best combo: {bestCombo}</p>
+                  <button onClick={() => setGameStatus("start")} className="rounded-2xl bg-fuchsia-500 px-8 py-4 text-xl font-black shadow-lg hover:bg-fuchsia-400">Play Again</button>
+                </div>
+              )}
+              <button onClick={exitGame} className="mt-6 font-bold text-purple-300 underline transition hover:text-white">Exit to Arcade</button>
             </div>
           </div>
         );
