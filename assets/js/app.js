@@ -1,0 +1,2194 @@
+import React, { useCallback, useEffect, useRef, useState } from "react";
+      import { createRoot } from "react-dom/client";
+      import { initializeApp } from "firebase/app";
+      import {
+        addDoc,
+        collection,
+        deleteDoc,
+        doc,
+        getDoc,
+        getFirestore,
+        limit,
+        onSnapshot,
+        orderBy,
+        query,
+        setDoc
+      } from "firebase/firestore";
+      import {
+        getAuth,
+        onAuthStateChanged,
+        signInAnonymously
+      } from "firebase/auth";
+
+      const firebaseConfig = {
+        // Paste your Firebase web app config here if you want the staff menu editor
+        // to save items online. The site still works without it.
+        // apiKey: "",
+        // authDomain: "",
+        // projectId: "",
+        // storageBucket: "",
+        // messagingSenderId: "",
+        // appId: ""
+      };
+
+      const appId = "pastry-pup-final";
+      const fallbackLogo =
+        "https://placehold.co/300x300/f9a8d4/ffffff?text=Pastry+Pup";
+      const ROUTES = {
+        home: "/",
+        arcade: "/arcade/",
+        catchingTreats: "/arcade/catching-treats/",
+        treatTapRevolution: "/arcade/treat-tap-revolution/",
+        watermelonJump: "/arcade/watermelon-jump/",
+        snakeBattle: "/arcade/snake-battle/",
+        wingsOfFireQuiz: "/arcade/wings-of-fire-quiz/",
+        disneyPersonality: "/arcade/disney-personality/"
+      };
+
+      const App = () => {
+        const [db, setDb] = useState(null);
+        const [user, setUser] = useState(null);
+        const [menuItems, setMenuItems] = useState([]);
+        const [isStaffModalOpen, setIsStaffModalOpen] = useState(false);
+        const [isLoggedIn, setIsLoggedIn] = useState(false);
+        const [password, setPassword] = useState("");
+        const [newItem, setNewItem] = useState({
+          name: "",
+          description: "",
+          price: "",
+          img: ""
+        });
+        const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+        const page = document.body.dataset.page || "home";
+
+        useEffect(() => {
+          if (!firebaseConfig.apiKey) return;
+          const app = initializeApp(firebaseConfig);
+          const database = getFirestore(app);
+          const auth = getAuth(app);
+          setDb(database);
+          signInAnonymously(auth).catch(console.error);
+          return onAuthStateChanged(auth, (u) => setUser(u));
+        }, []);
+
+        useEffect(() => {
+          if (!db || !user) return;
+          const menuRef = collection(
+            db,
+            "artifacts",
+            appId,
+            "public",
+            "data",
+            "menuItems"
+          );
+          const unsubscribe = onSnapshot(query(menuRef), (snapshot) => {
+            const items = snapshot.docs.map((doc) => ({
+              id: doc.id,
+              ...doc.data()
+            }));
+            setMenuItems(items);
+          });
+          return unsubscribe;
+        }, [db, user]);
+
+        const handleLogin = () => {
+          if (password === "pickles!") setIsLoggedIn(true);
+          else alert("Wrong password! Hint: cucumber");
+        };
+
+        const addItem = async () => {
+          if (!db) {
+            alert("Firebase is not configured yet, so online menu editing is disabled.");
+            return;
+          }
+          if (!newItem.name || !newItem.price) {
+            alert("Fill in the name and price!");
+            return;
+          }
+          const menuRef = collection(
+            db,
+            "artifacts",
+            appId,
+            "public",
+            "data",
+            "menuItems"
+          );
+          await addDoc(menuRef, { ...newItem, timestamp: Date.now() });
+          setNewItem({ name: "", description: "", price: "", img: "" });
+        };
+
+        const removeItem = async (id) => {
+          if (!db || !window.confirm("Delete this recipe?")) return;
+          await deleteDoc(
+            doc(db, "artifacts", appId, "public", "data", "menuItems", id)
+          );
+        };
+
+        const renderView = () => {
+          switch (page) {
+            case "arcade":
+              return <ArcadeMenu />;
+            case "catching-treats":
+              return <CatchingTreatsGame />;
+            case "treat-tap-revolution":
+              return <TreatTapRevolution />;
+            case "wings-of-fire-quiz":
+              return <PersonalityQuiz type="wof" />;
+            case "disney-personality":
+              return <PersonalityQuiz type="disney" />;
+            case "snake-battle":
+              return (
+                <ArcadeGameView>
+                  <SnakeFight />
+                </ArcadeGameView>
+              );
+            case "watermelon-jump":
+              return (
+                <ArcadeGameView>
+                  <WatermelonJump db={db} user={user} />
+                </ArcadeGameView>
+              );
+            default:
+              return <HomeView />;
+          }
+        };
+
+        const HomeView = () => (
+          <div className="min-h-screen bg-[#FEFCE8] text-slate-800 scroll-smooth">
+            <header className="fixed top-0 z-50 w-full border-b border-pink-100 bg-white/90 backdrop-blur-md">
+              <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
+                <a
+                  href={ROUTES.home}
+                  className="flex items-center gap-3"
+                >
+                  <img
+                    src="/logo.png"
+                    alt="Pastry Pup Logo"
+                    className="h-14 w-14 rounded-full bg-pink-50 object-cover shadow-md"
+                    onError={(e) => {
+                      e.currentTarget.src = fallbackLogo;
+                    }}
+                  />
+                  <span className="font-pacifico text-2xl text-pink-500">
+                    Pastry Pup
+                  </span>
+                </a>
+                <nav className="hidden items-center gap-8 font-bold text-slate-600 md:flex">
+                  <a href="#hero" className="transition hover:text-pink-500">
+                    Home
+                  </a>
+                  <a href="#story" className="transition hover:text-pink-500">
+                    Our Story
+                  </a>
+                  <a href="#menu" className="transition hover:text-pink-500">
+                    Menu
+                  </a>
+                  <a
+                    href={ROUTES.arcade}
+                    className="rounded-full bg-purple-500 px-5 py-2 text-sm font-black text-white shadow-md transition hover:bg-purple-600"
+                  >
+                    Arcade
+                  </a>
+                  <button
+                    onClick={() => setIsStaffModalOpen(true)}
+                    className="rounded-full border border-pink-200 bg-pink-50 px-5 py-2 text-sm font-black text-pink-600 transition hover:bg-pink-100"
+                  >
+                    Staff Only
+                  </button>
+                </nav>
+                <button
+                  className="text-2xl md:hidden"
+                  onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+                >
+                  Menu
+                </button>
+              </div>
+            </header>
+
+            {isMobileMenuOpen && (
+              <div className="fixed inset-0 z-[60] flex flex-col items-center justify-center gap-8 bg-white p-10 md:hidden">
+                <button
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  className="absolute right-6 top-6 text-4xl"
+                >
+                  &times;
+                </button>
+                <a
+                  href={ROUTES.home}
+                  className="text-3xl font-black"
+                >
+                  Home
+                </a>
+                <a
+                  href="#story"
+                  className="text-3xl font-black"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                >
+                  Our Story
+                </a>
+                <a
+                  href="#menu"
+                  className="text-3xl font-black"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                >
+                  Menu
+                </a>
+                <a
+                  href={ROUTES.arcade}
+                  className="text-3xl font-black text-purple-500"
+                >
+                  Arcade
+                </a>
+                <button
+                  onClick={() => {
+                    setIsStaffModalOpen(true);
+                    setIsMobileMenuOpen(false);
+                  }}
+                  className="text-3xl font-black text-pink-500"
+                >
+                  Staff Login
+                </button>
+              </div>
+            )}
+
+            <section
+              id="hero"
+              className="relative flex min-h-[90vh] flex-col items-center justify-center overflow-hidden bg-gradient-to-b from-pink-50 via-white to-[#FEFCE8] px-6 pb-20 pt-32 text-center"
+            >
+              <div className="animate-float relative mb-10">
+                <div className="flex h-64 w-64 items-center justify-center overflow-hidden rounded-[3rem] border-8 border-white bg-white p-4 shadow-2xl md:h-80 md:w-80">
+                  <img
+                    src="/logo.png"
+                    alt="Mascot"
+                    className="h-full w-full object-contain"
+                    onError={(e) => {
+                      e.currentTarget.src = fallbackLogo;
+                    }}
+                  />
+                </div>
+                <div className="absolute -right-6 -top-6 rotate-12 text-4xl">🧁</div>
+                <div className="absolute -bottom-6 -left-6 -rotate-12 text-4xl">🍪</div>
+              </div>
+              <h1 className="font-pacifico mb-6 text-6xl tracking-tight text-pink-500 md:text-9xl">
+                Pastry Pup
+              </h1>
+              <p className="max-w-2xl text-2xl font-black leading-tight tracking-tight text-orange-900 md:text-4xl">
+                Inspired by puppies, baked for humans.
+              </p>
+              <div className="mt-12 flex flex-wrap justify-center gap-5">
+                <a
+                  href="#menu"
+                  className="rounded-full bg-pink-500 px-10 py-5 text-2xl font-black text-white shadow-xl transition hover:scale-105 hover:bg-pink-600"
+                >
+                  Explore Menu
+                </a>
+                <a
+                  href={ROUTES.arcade}
+                  className="rounded-full bg-purple-500 px-10 py-5 text-2xl font-black text-white shadow-xl transition hover:scale-105 hover:bg-purple-600"
+                >
+                  Go to Arcade
+                </a>
+              </div>
+            </section>
+
+            <section id="story" className="scroll-mt-24 px-6 py-24">
+              <div className="mx-auto max-w-5xl overflow-hidden rounded-[4rem] bg-white shadow-2xl">
+                <div className="grid md:grid-cols-[0.8fr_1.2fr]">
+                  <div className="flex min-h-72 flex-col items-center justify-center bg-gradient-to-br from-pink-100 via-rose-50 to-amber-100 p-10 text-center">
+                    <span className="mb-5 rounded-full bg-white px-5 py-2 text-sm font-black uppercase tracking-[0.2em] text-pink-500 shadow-md">
+                      How it began
+                    </span>
+                    <h2 className="font-pacifico text-5xl leading-tight text-pink-500 md:text-6xl">
+                      Our Story
+                    </h2>
+                  </div>
+                  <div className="space-y-6 p-10 text-lg font-medium leading-relaxed text-slate-600 md:p-14">
+                    <p>
+                      Pastry Pup began when Lucy received a DIY bakery set. She
+                      loved the idea of running her own little bakery, but after
+                      the set was lost, she did not want to give up on it.
+                    </p>
+                    <p>
+                      Instead, Lucy kept going. With help from her family, she
+                      turned that small idea into something real and began making
+                      and selling pastries of her own.
+                    </p>
+                    <p>
+                      The name Pastry Pup came from Lucy’s love of cute puppies
+                      and baking.
+                    </p>
+                    <p className="border-l-4 border-pink-400 pl-5 text-xl font-black text-orange-900">
+                      Inspired by puppies, baked for humans.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <section id="menu" className="mx-auto max-w-7xl scroll-mt-24 px-6 py-24">
+              <h2 className="mb-16 text-center text-5xl font-black text-slate-800">
+                Baked Fresh Today
+              </h2>
+              <div className="grid grid-cols-1 gap-12 md:grid-cols-2 lg:grid-cols-3">
+                <MenuItem
+                  name="Pawnut Butter Cookie"
+                  desc="Rich peanut butter with honey and a hand-pressed paw print design."
+                  price="$2.50"
+                  img="https://placehold.co/400x300/fde68a/92400e?text=Pawnut+Butter+Cookie"
+                  isSignature
+                />
+                {menuItems.map((item) => (
+                  <MenuItem key={item.id} {...item} />
+                ))}
+              </div>
+            </section>
+
+            {isStaffModalOpen && (
+              <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+                <div className="relative max-h-[90vh] w-full max-w-md overflow-y-auto rounded-[3rem] bg-white p-10 shadow-2xl">
+                  <button
+                    onClick={() => setIsStaffModalOpen(false)}
+                    className="absolute right-8 top-6 text-4xl text-slate-300 transition hover:text-slate-600"
+                  >
+                    &times;
+                  </button>
+                  {!isLoggedIn ? (
+                    <div className="py-4 text-center">
+                      <h3 className="mb-6 text-3xl font-black">Staff Portal</h3>
+                      <input
+                        type="password"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        onKeyDown={(e) => e.key === "Enter" && handleLogin()}
+                        placeholder="Secret Password"
+                        className="mb-4 w-full rounded-3xl border-4 border-slate-50 p-5 text-center text-xl font-bold outline-none focus:border-pink-300"
+                      />
+                      <button
+                        onClick={handleLogin}
+                        className="w-full rounded-3xl bg-pink-500 py-5 font-black text-white shadow-lg hover:bg-pink-600"
+                      >
+                        Unlock Bakery
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="space-y-6">
+                      <h3 className="text-3xl font-black text-slate-800">
+                        Kitchen Manager
+                      </h3>
+                      {!db && (
+                        <p className="rounded-2xl bg-amber-50 p-4 text-sm font-bold text-amber-800">
+                          Firebase is not configured, so added treats will not save yet.
+                        </p>
+                      )}
+                      <div className="space-y-4 rounded-[2rem] bg-slate-50 p-6">
+                        <input
+                          value={newItem.name}
+                          onChange={(e) =>
+                            setNewItem({ ...newItem, name: e.target.value })
+                          }
+                          placeholder="Item Name"
+                          className="w-full rounded-2xl p-4 font-bold outline-none"
+                        />
+                        <textarea
+                          value={newItem.description}
+                          onChange={(e) =>
+                            setNewItem({
+                              ...newItem,
+                              description: e.target.value
+                            })
+                          }
+                          placeholder="Description"
+                          className="h-24 w-full rounded-2xl p-4 outline-none"
+                        />
+                        <input
+                          value={newItem.price}
+                          onChange={(e) =>
+                            setNewItem({ ...newItem, price: e.target.value })
+                          }
+                          placeholder="Price"
+                          className="w-full rounded-2xl p-4 font-bold outline-none"
+                        />
+                        <input
+                          value={newItem.img}
+                          onChange={(e) =>
+                            setNewItem({ ...newItem, img: e.target.value })
+                          }
+                          placeholder="Image URL"
+                          className="w-full rounded-2xl p-4 outline-none"
+                        />
+                        <button
+                          onClick={addItem}
+                          className="w-full rounded-2xl bg-green-500 py-4 font-black text-white transition hover:bg-green-600"
+                        >
+                          Add Treat
+                        </button>
+                      </div>
+                      <div className="space-y-2">
+                        <h4 className="text-xs font-black uppercase text-slate-400">
+                          Manage Display
+                        </h4>
+                        {menuItems.map((item) => (
+                          <div
+                            key={item.id}
+                            className="flex items-center justify-between rounded-2xl border-2 border-slate-50 bg-white p-4"
+                          >
+                            <span className="mr-2 truncate font-bold">
+                              {item.name}
+                            </span>
+                            <button
+                              onClick={() => removeItem(item.id)}
+                              className="rounded-xl bg-red-500 px-4 py-2 text-xs text-white"
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            <footer className="mt-20 rounded-t-[5rem] bg-slate-900 px-6 py-20 text-center text-white">
+              <div className="font-pacifico mb-8 text-4xl text-pink-400">
+                Pastry Pup
+              </div>
+              <p className="text-xs font-black uppercase tracking-widest text-slate-500">
+                &copy; 2026 Pastry Pup Bakery Ltd. All Rights Reserved.
+              </p>
+            </footer>
+          </div>
+        );
+
+        return renderView();
+      };
+
+      const MenuItem = ({ name, desc, description, price, img, isSignature }) => (
+        <div className="group rounded-[4rem] bg-white p-8 shadow-2xl transition-all duration-500 hover:scale-[1.03]">
+          <div className="relative mb-8 aspect-[4/3] overflow-hidden rounded-[3rem]">
+            <img
+              src={img || "https://placehold.co/400x300/fbcfe8/831843?text=Treat"}
+              alt={name}
+              className="h-full w-full object-cover transition-transform duration-1000 group-hover:scale-110"
+            />
+            {isSignature && (
+              <div className="absolute left-6 top-6 rounded-full bg-white/95 px-6 py-2 text-sm font-black text-pink-500 shadow-2xl">
+                🐾 Signature
+              </div>
+            )}
+          </div>
+          <h3 className="mb-3 text-3xl font-black text-slate-800">{name}</h3>
+          <p className="mb-10 line-clamp-3 text-lg font-medium leading-relaxed text-slate-500">
+            {desc || description}
+          </p>
+          <div className="flex items-center justify-between rounded-[2.5rem] bg-slate-50 p-4">
+            <span className="pl-4 text-3xl font-black text-pink-500">{price}</span>
+            <button className="rounded-2xl bg-slate-900 px-8 py-3 font-black text-white transition-all hover:bg-pink-500">
+              Order
+            </button>
+          </div>
+        </div>
+      );
+
+      const ArcadeMenu = () => (
+        <div className="flex min-h-screen flex-col items-center bg-[#FEFCE8] p-10">
+          <div className="mb-8 flex flex-col items-center gap-4 text-center sm:flex-row">
+            <img
+              src="/logo.png"
+              className="h-20 w-20 rounded-full border-4 border-white object-cover shadow-lg"
+              alt="Logo"
+              onError={(e) => {
+                e.currentTarget.src = fallbackLogo;
+              }}
+            />
+            <h1 className="font-pacifico text-5xl text-pink-500 md:text-6xl">
+              Pastry Pup Arcade
+            </h1>
+          </div>
+          <div className="grid w-full max-w-6xl grid-cols-1 gap-8 md:grid-cols-3">
+            <ArcadeCard
+              title="Catching Treats"
+              icon="🐶"
+              color="bg-pink-500"
+              desc="Move the pup to catch as many treats as you can."
+              href={ROUTES.catchingTreats}
+            />
+            <ArcadeCard
+              title="Wings of Fire Persona"
+              icon="🐉"
+              color="bg-orange-500"
+              desc="Discover your true dragon tribe from Pyrrhia."
+              href={ROUTES.wingsOfFireQuiz}
+            />
+            <ArcadeCard
+              title="Disney Personality"
+              icon="✨"
+              color="bg-blue-500"
+              desc="Find out which classic Disney character you are."
+              href={ROUTES.disneyPersonality}
+            />
+            <ArcadeCard
+              title="Snake Battle"
+              icon="🐍"
+              color="bg-teal-500"
+              desc="Two players battle with bites, strikes, blocks, and dodges."
+              href={ROUTES.snakeBattle}
+            />
+            <ArcadeCard
+              title="Watermelon Jump"
+              icon="🍉"
+              color="bg-green-500"
+              desc="Jump over utensils and duck under flying condiments."
+              href={ROUTES.watermelonJump}
+            />
+            <ArcadeCard
+              title="Treat Tap Revolution"
+              icon={"\u{1F3B5}"}
+              color="bg-fuchsia-500"
+              desc="Tap to the beat with one hand—or tackle two-hand patterns."
+              href={ROUTES.treatTapRevolution}
+            />
+          </div>
+          <a
+            href={ROUTES.home}
+            className="mt-20 text-xl font-black text-slate-400 underline transition hover:text-pink-500"
+          >
+            Back to Bakery
+          </a>
+        </div>
+      );
+
+      const ArcadeCard = ({ title, icon, color, desc, href }) => (
+        <a
+          href={href}
+          className="group flex flex-col items-center rounded-[3rem] bg-white p-10 text-center shadow-2xl transition hover:scale-105 active:scale-95"
+        >
+          <div
+            className={`mb-6 flex h-24 w-24 items-center justify-center rounded-3xl ${color} text-5xl font-black text-white shadow-lg transition group-hover:rotate-12`}
+          >
+            {icon}
+          </div>
+          <h3 className="mb-4 text-2xl font-black">{title}</h3>
+          <p className="font-medium leading-relaxed text-slate-500">{desc}</p>
+        </a>
+      );
+
+      const PersonalityQuiz = ({ type }) => {
+        const [step, setStep] = useState(0);
+        const [scores, setScores] = useState({});
+        const [result, setResult] = useState(null);
+
+        const data = {
+          wof: {
+            title: "Wings of Fire Tribe Quiz",
+            questions: [
+              {
+                q: "What's your favorite environment?",
+                options: [
+                  { t: "SeaWing", a: "Deep, mysterious ocean" },
+                  { t: "RainWing", a: "Lush, sun-dappled rainforest" },
+                  { t: "SandWing", a: "Hot, golden desert" },
+                  { t: "NightWing", a: "Vast, starry night sky" },
+                  { t: "IceWing", a: "Crisp, frozen peaks" }
+                ]
+              },
+              {
+                q: "What's your best trait?",
+                options: [
+                  { t: "MudWing", a: "Fierce loyalty to family" },
+                  { t: "SkyWing", a: "Powerful, fast flight" },
+                  { t: "NightWing", a: "Hidden, deep intelligence" },
+                  { t: "RainWing", a: "Calm, peaceful nature" },
+                  { t: "IceWing", a: "Noble, cold elegance" }
+                ]
+              },
+              {
+                q: "Choose a special ability:",
+                options: [
+                  { t: "RainWing", a: "Magical camouflage scales" },
+                  { t: "SeaWing", a: "Seeing perfectly in dark water" },
+                  { t: "IceWing", a: "Frostbreath that freezes foes" },
+                  { t: "NightWing", a: "Reading minds or seeing the future" },
+                  { t: "SkyWing", a: "Flying faster than any other tribe" }
+                ]
+              }
+            ],
+            results: {
+              SeaWing:
+                "You are a SeaWing! You are a master of the water and find peace in the waves.",
+              RainWing:
+                "You are a RainWing! You are peaceful, vibrant, and full of hidden talents.",
+              NightWing:
+                "You are a NightWing! You are mysterious, wise, and highly observant.",
+              SkyWing:
+                "You are a SkyWing! You are powerful, fast, and a fierce protector.",
+              IceWing:
+                "You are an IceWing! You are noble, elegant, and cool under pressure.",
+              SandWing:
+                "You are a SandWing! You are clever, resilient, and resourceful.",
+              MudWing:
+                "You are a MudWing! You value family above all else and have incredible strength."
+            }
+          },
+          disney: {
+            title: "Disney Personality Quiz",
+            questions: [
+              {
+                q: "What do you value most?",
+                options: [
+                  { t: "Mulan", a: "Honor and protecting family" },
+                  { t: "Belle", a: "Learning and seeing the world" },
+                  { t: "Stitch", a: "Finding a place to belong" },
+                  { t: "Elsa", a: "Accepting yourself as you are" },
+                  { t: "Simba", a: "Leadership and following your heart" }
+                ]
+              },
+              {
+                q: "Pick an ideal sidekick:",
+                options: [
+                  { t: "Simba", a: "A funny pair of friends" },
+                  { t: "Mulan", a: "A tiny, feisty dragon" },
+                  { t: "Ariel", a: "A nervous but loyal fish" },
+                  { t: "Elsa", a: "A magical, friendly snowman" },
+                  { t: "Mickey", a: "A clumsy but sweet dog" }
+                ]
+              },
+              {
+                q: "Where would your dream home be?",
+                options: [
+                  { t: "Simba", a: "A vast, beautiful savannah" },
+                  { t: "Ariel", a: "A colorful underwater palace" },
+                  { t: "Elsa", a: "A sparkling, quiet ice castle" },
+                  { t: "Moana", a: "A tropical island by the sea" },
+                  { t: "Belle", a: "A cozy cottage full of books" }
+                ]
+              }
+            ],
+            results: {
+              Mulan:
+                "You are Mulan! You are courageous and define your destiny through strength and wits.",
+              Belle:
+                "You are Belle! You value the beauty of the mind and heart.",
+              Stitch:
+                "You are Stitch! You are unique, energetic, and fiercely loyal.",
+              Elsa:
+                "You are Elsa! You are powerful, composed, and learning to shine.",
+              Simba:
+                "You are Simba! You are brave and grow stronger through every challenge.",
+              Mickey:
+                "You are Mickey Mouse! You are optimistic and value your friends most.",
+              Ariel:
+                "You are Ariel! You are curious and always dreaming beyond the horizon.",
+              Moana:
+                "You are Moana! You follow the call of the ocean and are a natural voyager."
+            }
+          }
+        };
+
+        const currentQuiz = data[type];
+
+        const handleAnswer = (choice) => {
+          const newScores = { ...scores, [choice]: (scores[choice] || 0) + 1 };
+          setScores(newScores);
+          if (step + 1 < currentQuiz.questions.length) {
+            setStep(step + 1);
+          } else {
+            const winner = Object.keys(newScores).reduce((a, b) =>
+              newScores[a] > newScores[b] ? a : b
+            );
+            setResult(winner);
+          }
+        };
+
+        return (
+          <div className="flex min-h-screen items-center justify-center bg-[#FEFCE8] p-6">
+            <div className="w-full max-w-2xl rounded-[3rem] bg-white p-8 text-center shadow-2xl md:p-12">
+              {!result ? (
+                <>
+                  <h2 className="mb-10 text-4xl font-black text-pink-500">
+                    {currentQuiz.title}
+                  </h2>
+                  <div className="mb-4 text-xs font-black uppercase tracking-widest text-slate-400">
+                    Question {step + 1} of {currentQuiz.questions.length}
+                  </div>
+                  <p className="mb-8 text-2xl font-bold leading-tight text-slate-700">
+                    {currentQuiz.questions[step].q}
+                  </p>
+                  <div className="grid gap-4">
+                    {currentQuiz.questions[step].options.map((opt) => (
+                      <button
+                        key={opt.a}
+                        onClick={() => handleAnswer(opt.t)}
+                        className="rounded-2xl border-2 border-transparent bg-slate-50 p-5 text-xl font-bold text-slate-700 transition hover:border-pink-200 hover:bg-pink-100 active:scale-95"
+                      >
+                        {opt.a}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              ) : (
+                <>
+                  <h2 className="mb-2 text-3xl font-bold text-slate-500">
+                    Your match is...
+                  </h2>
+                  <h1 className="mb-6 text-6xl font-black text-pink-500">
+                    {result}!
+                  </h1>
+                  <p className="mx-auto mb-10 max-w-md text-xl font-medium leading-relaxed text-slate-600">
+                    {currentQuiz.results[result]}
+                  </p>
+                  <a
+                    href={ROUTES.arcade}
+                    className="rounded-3xl bg-pink-500 px-10 py-5 text-xl font-black text-white shadow-lg transition hover:bg-pink-600 active:scale-95"
+                  >
+                    Back to Arcade
+                  </a>
+                </>
+              )}
+            </div>
+          </div>
+        );
+      };
+
+      const CatchingTreatsGame = () => {
+        const canvasRef = useRef(null);
+        const [score, setScore] = useState(0);
+        const [level, setLevel] = useState(1);
+        const [lives, setLives] = useState(0);
+        const [gameStatus, setGameStatus] = useState("start");
+
+        const startGame = (startingLives) => {
+          setLives(startingLives);
+          setScore(0);
+          setLevel(1);
+          setGameStatus("playing");
+        };
+
+        useEffect(() => {
+          if (gameStatus !== "playing") return undefined;
+          const canvas = canvasRef.current;
+          const ctx = canvas.getContext("2d");
+          const width = 500;
+          const height = 400;
+          const pupSize = 50;
+          const pastrySize = 30;
+          const pastries = [];
+          const doggy = {
+            x: 225,
+            y: 340,
+            speed: 10,
+            movingLeft: false,
+            movingRight: false
+          };
+          const pastryEmojis = ["🍪", "🧁", "🍩", "🍰", "🥐", "🐾", "🥨"];
+          const bugEmojis = ["\u{1F41B}", "\u{1FAB2}", "\u{1F577}\uFE0F"];
+          let currentScore = 0;
+          let currentLives = lives;
+          let currentLevel = 1;
+          let animationId;
+          let lastSpawnTime = 0;
+
+          const spawn = () => {
+            const isBug = Math.random() < Math.min(0.14 + currentLevel * 0.025, 0.32);
+            pastries.push({
+              x: Math.random() * (width - pastrySize),
+              y: -pastrySize,
+              emoji: isBug
+                ? bugEmojis[Math.floor(Math.random() * bugEmojis.length)]
+                : pastryEmojis[Math.floor(Math.random() * pastryEmojis.length)],
+              isBug,
+              speed: 3 + currentLevel * 0.5
+            });
+          };
+
+          const update = (time) => {
+            const spawnRate = Math.max(200, 1000 - currentLevel * 100);
+            if (time - lastSpawnTime > spawnRate) {
+              spawn();
+              lastSpawnTime = time;
+            }
+            ctx.clearRect(0, 0, width, height);
+            if (doggy.movingLeft) doggy.x -= doggy.speed;
+            if (doggy.movingRight) doggy.x += doggy.speed;
+            doggy.x = Math.max(0, Math.min(width - pupSize, doggy.x));
+
+            ctx.font = "50px serif";
+            ctx.fillText("🐶", doggy.x, doggy.y + 40);
+
+            for (let i = pastries.length - 1; i >= 0; i -= 1) {
+              pastries[i].y += pastries[i].speed;
+              ctx.font = "30px serif";
+              ctx.fillText(pastries[i].emoji, pastries[i].x, pastries[i].y + 25);
+
+              const caught =
+                pastries[i].x < doggy.x + pupSize &&
+                pastries[i].x + pastrySize > doggy.x &&
+                pastries[i].y < doggy.y + pupSize &&
+                pastries[i].y + pastrySize > doggy.y;
+
+              if (caught) {
+                const caughtBug = pastries[i].isBug;
+                pastries.splice(i, 1);
+                if (caughtBug) {
+                  currentLives -= 1;
+                  setLives(currentLives);
+                  if (currentLives <= 0) {
+                    setGameStatus("over");
+                    return;
+                  }
+                } else {
+                  currentScore += 1;
+                  setScore(currentScore);
+                  if (currentScore % 20 === 0) {
+                    currentLevel += 1;
+                    setLevel(currentLevel);
+                  }
+                }
+              } else if (pastries[i].y > height) {
+                const avoidedBug = pastries[i].isBug;
+                pastries.splice(i, 1);
+                if (!avoidedBug) {
+                  currentLives -= 1;
+                  setLives(currentLives);
+                  if (currentLives <= 0) {
+                    setGameStatus("over");
+                    return;
+                  }
+                }
+              }
+            }
+            animationId = requestAnimationFrame(update);
+          };
+
+          const handleKeyDown = (e) => {
+            if (e.key === "ArrowLeft") doggy.movingLeft = true;
+            if (e.key === "ArrowRight") doggy.movingRight = true;
+          };
+          const handleKeyUp = (e) => {
+            if (e.key === "ArrowLeft") doggy.movingLeft = false;
+            if (e.key === "ArrowRight") doggy.movingRight = false;
+          };
+          const moveCatcherToTouch = (event) => {
+            const touch = event.touches[0];
+            if (!touch) return;
+            event.preventDefault();
+            const rect = canvas.getBoundingClientRect();
+            const touchX = ((touch.clientX - rect.left) / rect.width) * width;
+            doggy.x = Math.max(0, Math.min(width - pupSize, touchX - pupSize / 2));
+          };
+
+          window.addEventListener("keydown", handleKeyDown);
+          window.addEventListener("keyup", handleKeyUp);
+          canvas.addEventListener("touchstart", moveCatcherToTouch, { passive: false });
+          canvas.addEventListener("touchmove", moveCatcherToTouch, { passive: false });
+          animationId = requestAnimationFrame(update);
+          return () => {
+            cancelAnimationFrame(animationId);
+            window.removeEventListener("keydown", handleKeyDown);
+            window.removeEventListener("keyup", handleKeyUp);
+            canvas.removeEventListener("touchstart", moveCatcherToTouch);
+            canvas.removeEventListener("touchmove", moveCatcherToTouch);
+          };
+        }, [gameStatus]);
+
+        return (
+          <div className="flex min-h-screen flex-col items-center justify-center bg-[#fefce8] p-6">
+            <div className="flex w-full max-w-xl flex-col items-center rounded-[3rem] bg-white p-10 text-center shadow-2xl">
+              <h1 className="font-pacifico mb-6 text-4xl text-pink-500">
+                Pastry Pup Game
+              </h1>
+              {gameStatus === "start" && (
+                <div className="space-y-6">
+                  <p className="text-xl font-bold text-slate-700">
+                    How many treats can you catch?
+                  </p>
+                  <p className="rounded-2xl bg-sky-50 p-4 font-bold leading-relaxed text-slate-600">
+                    Catch pastries with the pup. Avoid bugs—they cost one life. Missing a treat also costs one life. Drag on phones or use the arrow keys.
+                  </p>
+                  <div className="flex flex-col gap-4">
+                    <button
+                      onClick={() => startGame(5)}
+                      className="rounded-2xl bg-pink-500 px-8 py-4 text-xl font-black text-white shadow-lg transition hover:bg-pink-600"
+                    >
+                      Easy (5 Lives)
+                    </button>
+                    <button
+                      onClick={() => startGame(3)}
+                      className="rounded-2xl bg-purple-500 px-8 py-4 text-xl font-black text-white shadow-lg transition hover:bg-purple-600"
+                    >
+                      Normal (3 Lives)
+                    </button>
+                    <button
+                      onClick={() => startGame(1)}
+                      className="rounded-2xl bg-red-500 px-8 py-4 text-xl font-black text-white shadow-lg transition hover:bg-red-600"
+                    >
+                      Hard (1 Life)
+                    </button>
+                  </div>
+                </div>
+              )}
+              {gameStatus === "playing" && (
+                <div className="w-full space-y-4">
+                  <div className="flex w-full justify-between text-xl font-black text-pink-500">
+                    <span>Score: {score}</span>
+                    <span>Level: {level}</span>
+                    <span>Lives: {lives}</span>
+                  </div>
+                  <canvas
+                    ref={canvasRef}
+                    width="500"
+                    height="400"
+                    className="w-full rounded-3xl border-4 border-pink-100 bg-sky-50 shadow-inner"
+                    style={{ touchAction: "none" }}
+                  />
+                  <p className="text-sm font-bold text-slate-400">
+                    Drag the pup left and right on the game screen, or use the arrow keys.
+                  </p>
+                </div>
+              )}
+              {gameStatus === "over" && (
+                <div className="space-y-6">
+                  <h2 className="text-6xl font-black text-red-500">Game Over!</h2>
+                  <p className="text-3xl font-black text-slate-800">Score: {score}</p>
+                  <button
+                    onClick={() => setGameStatus("start")}
+                    className="rounded-3xl bg-pink-500 px-10 py-5 text-2xl font-black text-white shadow-xl hover:bg-pink-600"
+                  >
+                    Try Again
+                  </button>
+                </div>
+              )}
+              <a
+                href={ROUTES.arcade}
+                className="mt-8 font-bold text-slate-400 underline transition hover:text-pink-500"
+              >
+                Exit to Arcade
+              </a>
+            </div>
+          </div>
+        );
+      };
+
+      const TreatTapRevolution = () => {
+        const canvasRef = useRef(null);
+        const audioRef = useRef(null);
+        const [gameStatus, setGameStatus] = useState("start");
+        const [difficulty, setDifficulty] = useState("easy");
+        const [score, setScore] = useState(0);
+        const [combo, setCombo] = useState(0);
+        const [bestCombo, setBestCombo] = useState(0);
+        const [lives, setLives] = useState(5);
+
+        const modes = {
+          easy: { label: "Easy", hands: "1 hand", lanes: 2, bpm: 100, lives: 6, chords: false },
+          normal: { label: "Normal", hands: "1 hand", lanes: 3, bpm: 116, lives: 5, chords: false },
+          hard: { label: "Hard", hands: "2 hands", lanes: 4, bpm: 132, lives: 4, chords: true }
+        };
+
+        const stopMusic = () => {
+          const audio = audioRef.current;
+          audioRef.current = null;
+          if (audio && audio.state !== "closed") audio.close().catch(() => {});
+        };
+
+        useEffect(() => () => stopMusic(), []);
+
+        const startGame = (mode) => {
+          stopMusic();
+          const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+          if (AudioContextClass) {
+            const audio = new AudioContextClass();
+            audio.resume().catch(() => {});
+            audioRef.current = audio;
+          }
+          setDifficulty(mode);
+          setScore(0);
+          setCombo(0);
+          setBestCombo(0);
+          setLives(modes[mode].lives);
+          setGameStatus("playing");
+        };
+
+        useEffect(() => {
+          if (gameStatus !== "playing") return undefined;
+          const canvas = canvasRef.current;
+          const ctx = canvas.getContext("2d");
+          const width = 480;
+          const height = 560;
+          const targetY = height - 92;
+          const travelTime = 1900;
+          const hitWindow = difficulty === "hard" ? 145 : 185;
+          const mode = modes[difficulty];
+          const beatMs = 60000 / mode.bpm;
+          const totalBeats = 52;
+          const laneColors = ["#fb7185", "#a78bfa", "#38bdf8", "#fbbf24"];
+          const notes = [];
+          let elapsed = 0;
+          let animationId;
+          let currentScore = 0;
+          let currentCombo = 0;
+          let currentBest = 0;
+          let currentLives = mode.lives;
+          let lastMusicBeat = -1;
+          const startTime = performance.now();
+
+          for (let beat = 4; beat < totalBeats; beat += 1) {
+            const firstLane = Math.floor(Math.random() * mode.lanes);
+            notes.push({ lane: firstLane, hitTime: beat * beatMs, hit: false, missed: false });
+            if (mode.chords && beat % 4 === 2) {
+              let secondLane = Math.floor(Math.random() * mode.lanes);
+              if (secondLane === firstLane) secondLane = (secondLane + 2) % mode.lanes;
+              notes.push({ lane: secondLane, hitTime: beat * beatMs, hit: false, missed: false });
+            }
+          }
+
+          const playTone = (frequency, duration, type = "sine", volume = 0.05) => {
+            const audio = audioRef.current;
+            if (!audio || audio.state === "closed") return;
+            const oscillator = audio.createOscillator();
+            const gain = audio.createGain();
+            oscillator.type = type;
+            oscillator.frequency.value = frequency;
+            gain.gain.setValueAtTime(volume, audio.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.001, audio.currentTime + duration);
+            oscillator.connect(gain);
+            gain.connect(audio.destination);
+            oscillator.start();
+            oscillator.stop(audio.currentTime + duration);
+          };
+
+          const playMusicBeat = (beat) => {
+            const melody = [261.63, 329.63, 392, 523.25, 392, 329.63, 293.66, 349.23];
+            playTone(melody[beat % melody.length], 0.16, "triangle", 0.045);
+            if (beat % 4 === 0) playTone(130.81, 0.22, "sine", 0.07);
+            if (beat % 2 === 1) playTone(880, 0.045, "square", 0.012);
+          };
+
+          const finishGame = () => {
+            setGameStatus("over");
+            stopMusic();
+          };
+
+          const hitLane = (lane) => {
+            const candidate = notes
+              .filter((note) => !note.hit && !note.missed && note.lane === lane && Math.abs(note.hitTime - elapsed) <= hitWindow)
+              .sort((a, b) => Math.abs(a.hitTime - elapsed) - Math.abs(b.hitTime - elapsed))[0];
+            if (!candidate) {
+              currentCombo = 0;
+              setCombo(0);
+              return;
+            }
+            candidate.hit = true;
+            currentCombo += 1;
+            currentBest = Math.max(currentBest, currentCombo);
+            currentScore += 100 + Math.min(400, currentCombo * 10);
+            setCombo(currentCombo);
+            setBestCombo(currentBest);
+            setScore(currentScore);
+            playTone(520 + lane * 85, 0.1, "sine", 0.075);
+          };
+
+          const handlePointerDown = (event) => {
+            event.preventDefault();
+            const rect = canvas.getBoundingClientRect();
+            const pointerX = ((event.clientX - rect.left) / rect.width) * width;
+            const lane = Math.max(0, Math.min(mode.lanes - 1, Math.floor(pointerX / (width / mode.lanes))));
+            hitLane(lane);
+          };
+
+          const handleKeyDown = (event) => {
+            const laneKeys = mode.lanes === 2 ? ["f", "j"] : mode.lanes === 3 ? ["d", "f", "j"] : ["d", "f", "j", "k"];
+            const lane = laneKeys.indexOf(event.key.toLowerCase());
+            if (lane >= 0 && !event.repeat) {
+              event.preventDefault();
+              hitLane(lane);
+            }
+          };
+
+          const draw = (time) => {
+            elapsed = time - startTime;
+            const musicBeat = Math.floor(elapsed / beatMs);
+            if (musicBeat !== lastMusicBeat) {
+              lastMusicBeat = musicBeat;
+              playMusicBeat(musicBeat);
+            }
+
+            ctx.clearRect(0, 0, width, height);
+            const gradient = ctx.createLinearGradient(0, 0, 0, height);
+            gradient.addColorStop(0, "#312e81");
+            gradient.addColorStop(1, "#701a75");
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, width, height);
+
+            const laneWidth = width / mode.lanes;
+            for (let lane = 0; lane < mode.lanes; lane += 1) {
+              ctx.fillStyle = lane % 2 ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.08)";
+              ctx.fillRect(lane * laneWidth, 0, laneWidth, height);
+              ctx.strokeStyle = "rgba(255,255,255,0.22)";
+              ctx.lineWidth = 2;
+              ctx.strokeRect(lane * laneWidth, 0, laneWidth, height);
+              ctx.fillStyle = laneColors[lane];
+              ctx.globalAlpha = 0.45;
+              ctx.fillRect(lane * laneWidth + 8, targetY - 10, laneWidth - 16, 20);
+              ctx.globalAlpha = 1;
+              ctx.fillStyle = "#fff";
+              ctx.font = "bold 20px Inter, sans-serif";
+              ctx.textAlign = "center";
+              const laneLabels = mode.lanes === 2 ? ["F", "J"] : mode.lanes === 3 ? ["D", "F", "J"] : ["D", "F", "J", "K"];
+              ctx.fillText(laneLabels[lane], lane * laneWidth + laneWidth / 2, height - 28);
+            }
+
+            for (const note of notes) {
+              if (note.hit || note.missed) continue;
+              const y = targetY - ((note.hitTime - elapsed) / travelTime) * targetY;
+              if (y < -40 || y > height + 40) continue;
+              const x = note.lane * laneWidth + laneWidth / 2;
+              ctx.beginPath();
+              ctx.arc(x, y, Math.min(30, laneWidth * 0.28), 0, Math.PI * 2);
+              ctx.fillStyle = laneColors[note.lane];
+              ctx.fill();
+              ctx.strokeStyle = "#fff";
+              ctx.lineWidth = 4;
+              ctx.stroke();
+              ctx.fillStyle = "#fff";
+              ctx.font = "22px serif";
+              ctx.textAlign = "center";
+              ctx.fillText("\u{1F36A}", x, y + 8);
+            }
+
+            for (const note of notes) {
+              if (!note.hit && !note.missed && elapsed > note.hitTime + hitWindow) {
+                note.missed = true;
+                currentLives -= 1;
+                currentCombo = 0;
+                setLives(currentLives);
+                setCombo(0);
+                if (currentLives <= 0) {
+                  finishGame();
+                  return;
+                }
+              }
+            }
+
+            if (elapsed > totalBeats * beatMs + 800) {
+              finishGame();
+              return;
+            }
+            animationId = requestAnimationFrame(draw);
+          };
+
+          canvas.addEventListener("pointerdown", handlePointerDown);
+          window.addEventListener("keydown", handleKeyDown);
+          animationId = requestAnimationFrame(draw);
+          return () => {
+            cancelAnimationFrame(animationId);
+            canvas.removeEventListener("pointerdown", handlePointerDown);
+            window.removeEventListener("keydown", handleKeyDown);
+          };
+        }, [gameStatus, difficulty]);
+
+        return (
+          <div className="flex min-h-[100dvh] flex-col items-center justify-center bg-gradient-to-b from-indigo-950 via-purple-900 to-fuchsia-900 p-4 text-white">
+            <div className="w-full max-w-xl rounded-[2.5rem] border-4 border-fuchsia-300 bg-slate-950/80 p-5 text-center shadow-2xl sm:p-8">
+              <h1 className="font-pacifico mb-3 text-4xl text-pink-300 sm:text-5xl">Treat Tap Revolution</h1>
+              {gameStatus === "start" && (
+                <div className="space-y-5">
+                  <p className="rounded-2xl bg-white/10 p-4 font-bold leading-relaxed text-purple-100">
+                    Tap each lane when its treat reaches the glowing bar. Easy and Normal use one-finger patterns. Hard adds two-note chords—use two fingers together. Turn your sound on!
+                  </p>
+                  <div className="grid gap-3 sm:grid-cols-3">
+                    {Object.entries(modes).map(([key, mode]) => (
+                      <button key={key} onClick={() => startGame(key)} className="rounded-2xl bg-fuchsia-500 px-4 py-4 font-black shadow-lg transition hover:bg-fuchsia-400 active:scale-95">
+                        {mode.label}<span className="mt-1 block text-xs text-fuchsia-100">{mode.hands} · {mode.bpm} BPM</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {gameStatus === "playing" && (
+                <div className="space-y-3">
+                  <div className="grid grid-cols-3 gap-2 font-black text-pink-200">
+                    <span>Score {score}</span><span>Combo {combo}</span><span>Lives {lives}</span>
+                  </div>
+                  <canvas ref={canvasRef} width="480" height="560" className="mx-auto block max-h-[72dvh] w-full rounded-3xl border-4 border-fuchsia-300 shadow-2xl" style={{ touchAction: "none", aspectRatio: "6 / 7" }} />
+                  <p className="text-sm font-bold text-purple-200">Tap the lanes—or use {modes[difficulty].lanes === 2 ? "F / J" : modes[difficulty].lanes === 3 ? "D / F / J" : "D / F / J / K"}.</p>
+                </div>
+              )}
+              {gameStatus === "over" && (
+                <div className="space-y-5">
+                  <h2 className="text-4xl font-black text-pink-300">Song Complete!</h2>
+                  <p className="text-2xl font-black">Score: {score}</p>
+                  <p className="font-bold text-purple-200">Best combo: {bestCombo}</p>
+                  <button onClick={() => setGameStatus("start")} className="rounded-2xl bg-fuchsia-500 px-8 py-4 text-xl font-black shadow-lg hover:bg-fuchsia-400">Play Again</button>
+                </div>
+              )}
+              <a href={ROUTES.arcade} onClick={stopMusic} className="mt-6 inline-block font-bold text-purple-300 underline transition hover:text-white">Exit to Arcade</a>
+            </div>
+          </div>
+        );
+      };
+
+      const SnakeFight = (() => {
+        // ============ GAME CONSTANTS ============
+        const MAX_HP = 100;
+        const BITE_DMG = 22;
+        const STRIKE_DMG = 10;
+        const BITE_WINDUP = 350;   // ms before bite lands
+        const STRIKE_WINDUP = 160; // ms before strike lands
+        const BITE_COOLDOWN = 900;
+        const STRIKE_COOLDOWN = 450;
+        const JUMP_TIME = 500;
+        const CROUCH_TIME = 500;
+
+        // Marker palette from the drawing
+        const TEAL = "#1a9e9e";
+        const DARKTEAL = "#0e6b6b";
+        const RED = "#d33a2c";
+        const PINK = "#f286b0";
+        const ORANGE = "#f0a622";
+        const GREEN = "#2e9e4f";
+        const INK = "#1b1b1b";
+        const PAPER = "#fdfaf2";
+
+        const font = "'Comic Sans MS', 'Chalkboard SE', 'Comic Neue', cursive";
+
+        function makePlayer() {
+          return {
+            hp: MAX_HP,
+            state: "idle", // idle | jump | crouch | block | bite | strike | hit | ko
+            stateUntil: 0,
+            cooldownUntil: 0,
+            blocking: false,
+          };
+        }
+
+        return function SnakeFight() {
+          const [screen, setScreen] = useState("title"); // title | fight | over
+          const [winner, setWinner] = useState(null);
+          const [, forceRender] = useState(0);
+          const p1 = useRef(makePlayer());
+          const p2 = useRef(makePlayer());
+          const [flash, setFlash] = useState(null); // {who, text, color}
+          const rafRef = useRef();
+
+          const now = () => performance.now();
+
+          const showFlash = (who, text, color) => {
+            setFlash({ who, text, color, id: Math.random() });
+            setTimeout(() => setFlash((f) => (f && f.text === text ? null : f)), 600);
+          };
+
+          const resetGame = () => {
+            p1.current = makePlayer();
+            p2.current = makePlayer();
+            setWinner(null);
+            setFlash(null);
+            setScreen("fight");
+          };
+
+          // ---- resolve an attack from attacker onto defender ----
+          const resolveAttack = useCallback((atk, def, kind, atkName, defName) => {
+            const t = now();
+            if (def.current.hp <= 0 || atk.current.hp <= 0) return;
+            const d = def.current;
+            if (kind === "bite") {
+              if (d.state === "jump") { showFlash(defName, "DODGED!", GREEN); return; }
+              let dmg = BITE_DMG;
+              if (d.state === "block") { dmg = Math.ceil(dmg / 4); showFlash(defName, "BLOCKED!", TEAL); }
+              else showFlash(defName, "CHOMP! -" + dmg, RED);
+              d.hp = Math.max(0, d.hp - dmg);
+            } else {
+              if (d.state === "crouch") { showFlash(defName, "DUCKED!", GREEN); return; }
+              let dmg = STRIKE_DMG;
+              if (d.state === "block") { dmg = Math.ceil(dmg / 4); showFlash(defName, "BLOCKED!", TEAL); }
+              else showFlash(defName, "STRIKE! -" + dmg, ORANGE);
+              d.hp = Math.max(0, d.hp - dmg);
+            }
+            if (d.hp <= 0) {
+              d.state = "ko";
+              setWinner(atkName);
+              setTimeout(() => setScreen("over"), 900);
+            } else if (d.state !== "block" && d.state !== "jump" && d.state !== "crouch") {
+              d.state = "hit";
+              d.stateUntil = t + 300;
+            }
+          }, []);
+
+          // ---- perform action for a player ----
+          const doAction = useCallback((who, action) => {
+            if (screen !== "fight") return;
+            const me = who === 1 ? p1 : p2;
+            const other = who === 1 ? p2 : p1;
+            const myName = who === 1 ? "P1" : "P2";
+            const otherName = who === 1 ? "P2" : "P1";
+            const t = now();
+            const m = me.current;
+            if (m.hp <= 0) return;
+            if (m.state === "bite" || m.state === "strike") return; // mid-attack
+
+            switch (action) {
+              case "jump":
+                m.state = "jump"; m.stateUntil = t + JUMP_TIME; break;
+              case "crouch":
+                m.state = "crouch"; m.stateUntil = t + CROUCH_TIME; break;
+              case "blockOn":
+                m.blocking = true; m.state = "block"; m.stateUntil = Infinity; break;
+              case "blockOff":
+                m.blocking = false;
+                if (m.state === "block") { m.state = "idle"; m.stateUntil = 0; }
+                break;
+              case "bite":
+                if (t < m.cooldownUntil) return;
+                m.state = "bite"; m.stateUntil = t + BITE_WINDUP;
+                m.cooldownUntil = t + BITE_COOLDOWN;
+                setTimeout(() => {
+                  resolveAttack(me, other, "bite", myName, otherName);
+                  if (me.current.state === "bite") {
+                    me.current.state = me.current.blocking ? "block" : "idle";
+                    me.current.stateUntil = me.current.blocking ? Infinity : 0;
+                  }
+                }, BITE_WINDUP);
+                break;
+              case "strike":
+                if (t < m.cooldownUntil) return;
+                m.state = "strike"; m.stateUntil = t + STRIKE_WINDUP;
+                m.cooldownUntil = t + STRIKE_COOLDOWN;
+                setTimeout(() => {
+                  resolveAttack(me, other, "strike", myName, otherName);
+                  if (me.current.state === "strike") {
+                    me.current.state = me.current.blocking ? "block" : "idle";
+                    me.current.stateUntil = me.current.blocking ? Infinity : 0;
+                  }
+                }, STRIKE_WINDUP);
+                break;
+              default: break;
+            }
+          }, [screen, resolveAttack]);
+
+          // ---- game loop: expire timed states, re-render ----
+          useEffect(() => {
+            const tick = () => {
+              const t = now();
+              [p1, p2].forEach((p) => {
+                const m = p.current;
+                if (m.state !== "idle" && m.state !== "ko" && m.state !== "block" && t > m.stateUntil) {
+                  m.state = m.blocking ? "block" : "idle";
+                  m.stateUntil = m.blocking ? Infinity : 0;
+                }
+              });
+              forceRender((n) => n + 1);
+              rafRef.current = requestAnimationFrame(tick);
+            };
+            rafRef.current = requestAnimationFrame(tick);
+            return () => cancelAnimationFrame(rafRef.current);
+          }, []);
+
+          // ---- keyboard ----
+          useEffect(() => {
+            const down = (e) => {
+              if (screen === "title" && (e.key === "Enter" || e.key === " ")) { resetGame(); return; }
+              if (screen === "over" && (e.key === "Enter" || e.key === " ")) { resetGame(); return; }
+              if (e.repeat) return;
+              switch (e.key.toLowerCase()) {
+                // P1: WASD + F (bite) + G (strike)
+                case "w": doAction(1, "jump"); break;
+                case "s": doAction(1, "crouch"); break;
+                case "a": case "d": doAction(1, "blockOn"); break;
+                case "f": doAction(1, "bite"); break;
+                case "g": doAction(1, "strike"); break;
+                // P2: arrows + K (bite) + L (strike)
+                case "arrowup": e.preventDefault(); doAction(2, "jump"); break;
+                case "arrowdown": e.preventDefault(); doAction(2, "crouch"); break;
+                case "arrowleft": case "arrowright": e.preventDefault(); doAction(2, "blockOn"); break;
+                case "k": doAction(2, "bite"); break;
+                case "l": doAction(2, "strike"); break;
+                default: break;
+              }
+            };
+            const up = (e) => {
+              switch (e.key.toLowerCase()) {
+                case "a": case "d": doAction(1, "blockOff"); break;
+                case "arrowleft": case "arrowright": doAction(2, "blockOff"); break;
+                default: break;
+              }
+            };
+            window.addEventListener("keydown", down);
+            window.addEventListener("keyup", up);
+            return () => { window.removeEventListener("keydown", down); window.removeEventListener("keyup", up); };
+          }, [screen, doAction]);
+
+          // ============ SNAKE DRAWING ============
+          const Snake = ({ player, flip, color }) => {
+            const st = player.state;
+            const jumpY = st === "jump" ? -46 : 0;
+            const crouchY = st === "crouch" ? 22 : 0;
+            const lunge = st === "bite" ? (flip ? -34 : 34) : st === "strike" ? (flip ? -20 : 20) : 0;
+            const shake = st === "hit" ? (Math.random() * 8 - 4) : 0;
+            const koRot = st === "ko" ? (flip ? 80 : -80) : 0;
+            const mouthOpen = st === "bite" ? 26 : st === "strike" ? 10 : 4;
+            return (
+              <div style={{
+                transform: `translate(${lunge + shake}px, ${jumpY + crouchY}px) rotate(${koRot}deg) scaleX(${flip ? -1 : 1}) ${st === "crouch" ? "scaleY(0.72)" : ""}`,
+                transition: st === "hit" ? "none" : "transform 120ms ease-out",
+                transformOrigin: "center bottom",
+              }}>
+                <svg width="150" height="130" viewBox="0 0 150 130">
+                  {/* body squiggle - like the marker drawing */}
+                  <path
+                    d="M8 118 Q 22 84 40 104 Q 58 124 68 92 Q 78 60 96 78 Q 110 92 118 70"
+                    fill="none" stroke={INK} strokeWidth="17" strokeLinecap="round" />
+                  <path
+                    d="M8 118 Q 22 84 40 104 Q 58 124 68 92 Q 78 60 96 78 Q 110 92 118 70"
+                    fill="none" stroke={color} strokeWidth="10" strokeLinecap="round" />
+                  {/* head */}
+                  <g transform="translate(118,60)">
+                    <ellipse cx="8" cy="6" rx="21" ry="15" fill={color} stroke={INK} strokeWidth="3.5" />
+                    {/* mouth */}
+                    <path d={`M 22 6 L 32 ${6 - mouthOpen / 2} M 22 6 L 32 ${6 + mouthOpen / 2}`}
+                      stroke={INK} strokeWidth="3.5" strokeLinecap="round" fill="none" />
+                    {/* fang when biting */}
+                    {st === "bite" && <path d="M 26 0 l 3 6 l 3 -6 z" fill="#fff" stroke={INK} strokeWidth="1.5" />}
+                    {/* eye */}
+                    <circle cx="8" cy="0" r="4.5" fill="#fff" stroke={INK} strokeWidth="2" />
+                    <circle cx="9.5" cy="0" r="2" fill={INK} />
+                    {st === "ko" && <text x="3" y="4" fontSize="12" fontFamily={font} fill={INK}>x</text>}
+                    {/* tongue on strike */}
+                    {st === "strike" && <path d="M 30 6 h 14 l -4 -4 m 4 4 l -4 4" stroke={RED} strokeWidth="3" fill="none" strokeLinecap="round" />}
+                  </g>
+                  {/* shield when blocking */}
+                  {st === "block" && (
+                    <g transform="translate(136,52)">
+                      <ellipse cx="0" cy="14" rx="10" ry="22" fill={PINK} stroke={INK} strokeWidth="3" opacity="0.9" />
+                    </g>
+                  )}
+                </svg>
+              </div>
+            );
+          };
+
+          // ============ HP BAR ============
+          const HpBar = ({ hp, name, color, flip }) => (
+            <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: flip ? "flex-end" : "flex-start", gap: 3 }}>
+              <div style={{ fontFamily: font, fontWeight: 700, fontSize: 15, color: INK, background: color, padding: "1px 10px", borderRadius: 6, border: `2.5px solid ${INK}`, transform: "rotate(-1.5deg)" }}>{name}</div>
+              <div style={{ width: "100%", height: 20, border: `3px solid ${INK}`, borderRadius: 8, background: "#fff", overflow: "hidden", transform: flip ? "rotate(0.8deg)" : "rotate(-0.8deg)" }}>
+                <div style={{
+                  width: `${(hp / MAX_HP) * 100}%`, height: "100%",
+                  background: hp > 40 ? GREEN : hp > 15 ? ORANGE : RED,
+                  transition: "width 200ms ease-out, background 200ms",
+                  marginLeft: flip ? "auto" : 0,
+                }} />
+              </div>
+            </div>
+          );
+
+          // ============ CONTROLLER (styled like the drawing) ============
+          const Pad = ({ who, accent }) => {
+            const btn = (label, action, style, hold) => {
+              const handlers = hold
+                ? {
+                    onTouchStart: (e) => { e.preventDefault(); doAction(who, "blockOn"); },
+                    onTouchEnd: (e) => { e.preventDefault(); doAction(who, "blockOff"); },
+                    onMouseDown: () => doAction(who, "blockOn"),
+                    onMouseUp: () => doAction(who, "blockOff"),
+                    onMouseLeave: () => doAction(who, "blockOff"),
+                  }
+                : {
+                    onTouchStart: (e) => { e.preventDefault(); doAction(who, action); },
+                    onMouseDown: () => doAction(who, action),
+                  };
+              return (
+                <button {...handlers} style={{
+                  fontFamily: font, fontWeight: 700, border: `3px solid ${INK}`,
+                  background: PAPER, color: INK, borderRadius: 10,
+                  touchAction: "none", userSelect: "none", WebkitUserSelect: "none",
+                  fontSize: 13, lineHeight: 1.1, padding: 0,
+                  boxShadow: `2px 2px 0 ${INK}`,
+                  cursor: "pointer", ...style,
+                }}>{label}</button>
+              );
+            };
+            const cell = 44;
+            return (
+              <div style={{
+                background: PAPER, border: `3px solid ${INK}`, borderRadius: 14,
+                padding: 10, display: "flex", alignItems: "center", gap: 12,
+                transform: who === 1 ? "rotate(-1deg)" : "rotate(1deg)",
+                boxShadow: `3px 3px 0 rgba(0,0,0,0.25)`,
+              }}>
+                {/* D-pad */}
+                <div style={{ display: "grid", gridTemplateColumns: `repeat(3, ${cell}px)`, gridTemplateRows: `repeat(3, ${cell}px)`, gap: 3 }}>
+                  <div />{btn("\u25B2 dodge", "jump", { gridColumn: 2, background: "#cdeeee" })}<div />
+                  {btn("\u25C0 block", null, { background: "#cdeeee" }, true)}
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "center", fontFamily: font, fontSize: 10, color: DARKTEAL }}>P{who}</div>
+                  {btn("block \u25B6", null, { background: "#cdeeee" }, true)}
+                  <div />{btn("\u25BC crouch", "crouch", { gridColumn: 2, background: "#cdeeee" })}<div />
+                </div>
+                {/* Action buttons */}
+                <div style={{ display: "flex", flexDirection: "column", gap: 8, alignItems: "center" }}>
+                  {btn("BITE", "bite", { width: 66, height: 66, borderRadius: "50%", background: accent, color: "#fff", fontSize: 15, textShadow: `1px 1px 0 ${INK}` })}
+                  {btn("strike", "strike", { width: 50, height: 34, borderRadius: 17, background: ORANGE })}
+                </div>
+              </div>
+            );
+          };
+
+          // ============ SCREENS ============
+          const paperBg = {
+            minHeight: "100vh", width: "100%", background: PAPER,
+            backgroundImage: `repeating-linear-gradient(0deg, transparent, transparent 26px, rgba(26,158,158,0.08) 27px)`,
+            fontFamily: font, display: "flex", flexDirection: "column",
+            overflow: "hidden", position: "relative",
+          };
+
+          if (screen === "title") {
+            return (
+              <div style={{ ...paperBg, alignItems: "center", justifyContent: "center", gap: 18, padding: 20 }}>
+                <svg width="200" height="70" viewBox="0 0 200 70">
+                  <path d="M10 55 Q 35 15 60 45 Q 85 75 110 40 Q 135 10 160 40 Q 175 58 190 35"
+                    fill="none" stroke={INK} strokeWidth="16" strokeLinecap="round" />
+                  <path d="M10 55 Q 35 15 60 45 Q 85 75 110 40 Q 135 10 160 40 Q 175 58 190 35"
+                    fill="none" stroke={TEAL} strokeWidth="9" strokeLinecap="round" />
+                </svg>
+                <h1 style={{ margin: 0, fontSize: "clamp(34px, 9vw, 64px)", color: INK, transform: "rotate(-2deg)", textAlign: "center" }}>
+                  SNAKE <span style={{ color: RED }}>FIGHT!</span>
+                </h1>
+                <div style={{ background: "#fff", border: `3px solid ${INK}`, borderRadius: 12, padding: "12px 18px", maxWidth: 420, transform: "rotate(0.6deg)", fontSize: 15, lineHeight: 1.6 }}>
+                  <b>{"\u25B2"}</b> dodge / jump (avoids BITE) &nbsp;&middot;&nbsp; <b>{"\u25BC"}</b> crouch (avoids strike)<br />
+                  <b>{"\u25C0 \u25B6"}</b> hold to block (way less damage)<br />
+                  <b style={{ color: RED }}>BIG BUTTON</b> = BITE (slow, big chomp)<br />
+                  <b style={{ color: "#b07400" }}>middle button</b> = strike (fast jab)<br />
+                  <span style={{ fontSize: 13, color: "#666" }}>Keyboard - P1: W A S D + F/G &middot; P2: arrows + K/L</span>
+                </div>
+                <button onClick={resetGame} style={{
+                  fontFamily: font, fontSize: 24, fontWeight: 700, padding: "12px 36px",
+                  background: ORANGE, border: `4px solid ${INK}`, borderRadius: 14,
+                  boxShadow: `4px 4px 0 ${INK}`, cursor: "pointer", transform: "rotate(-1deg)",
+                }}>{"\u25B6 START"}</button>
+              </div>
+            );
+          }
+
+          if (screen === "over") {
+            const wColor = winner === "P1" ? TEAL : GREEN;
+            return (
+              <div style={{ ...paperBg, alignItems: "center", justifyContent: "center", gap: 20, padding: 20 }}>
+                <h1 style={{ margin: 0, fontSize: "clamp(30px, 8vw, 56px)", transform: "rotate(-2deg)", color: INK }}>
+                  <span style={{ background: wColor, color: "#fff", padding: "2px 14px", borderRadius: 10, border: `4px solid ${INK}` }}>{winner}</span> WINS!
+                </h1>
+                <div style={{ fontSize: 40 }}>{"\u{1F3C6}"}</div>
+                <button onClick={resetGame} style={{
+                  fontFamily: font, fontSize: 22, fontWeight: 700, padding: "12px 32px",
+                  background: PINK, border: `4px solid ${INK}`, borderRadius: 14,
+                  boxShadow: `4px 4px 0 ${INK}`, cursor: "pointer",
+                }}>{"\u21BB REMATCH"}</button>
+              </div>
+            );
+          }
+
+          // fight screen
+          const A = p1.current, B = p2.current;
+          return (
+            <div style={paperBg}>
+              {/* HP bars */}
+              <div style={{ display: "flex", gap: 14, padding: "12px 14px 4px", alignItems: "flex-start" }}>
+                <HpBar hp={A.hp} name="P1" color={TEAL} flip={false} />
+                <div style={{ fontSize: 22, fontWeight: 700, paddingTop: 2 }}>VS</div>
+                <HpBar hp={B.hp} name="P2" color={GREEN} flip={true} />
+              </div>
+
+              {/* Arena */}
+              <div style={{ flex: 1, position: "relative", display: "flex", alignItems: "flex-end", justifyContent: "center", gap: "6vw", paddingBottom: 8, minHeight: 170 }}>
+                {/* red zigzag ground, like the drawing */}
+                <svg style={{ position: "absolute", bottom: 0, left: 0, width: "100%", height: 26 }} preserveAspectRatio="none" viewBox="0 0 400 26">
+                  <path d="M0 20 L20 6 L40 20 L60 6 L80 20 L100 6 L120 20 L140 6 L160 20 L180 6 L200 20 L220 6 L240 20 L260 6 L280 20 L300 6 L320 20 L340 6 L360 20 L380 6 L400 20"
+                    fill="none" stroke={RED} strokeWidth="7" strokeLinecap="round" />
+                </svg>
+                {/* flash text */}
+                {flash && (
+                  <div key={flash.id} style={{
+                    position: "absolute", top: 8, left: flash.who === "P1" ? "18%" : undefined, right: flash.who === "P2" ? "18%" : undefined,
+                    fontFamily: font, fontWeight: 700, fontSize: 24, color: "#fff",
+                    background: flash.color, border: `3px solid ${INK}`, padding: "2px 12px",
+                    borderRadius: 10, transform: "rotate(-4deg)", boxShadow: `2px 2px 0 ${INK}`,
+                    animation: "pop 0.6s ease-out",
+                  }}>{flash.text}</div>
+                )}
+                <Snake player={A} flip={false} color={TEAL} />
+                <Snake player={B} flip={true} color={GREEN} />
+              </div>
+
+              {/* Controllers */}
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 8, padding: "6px 8px 14px", flexWrap: "wrap" }}>
+                <Pad who={1} accent={TEAL} />
+                <Pad who={2} accent={GREEN} />
+              </div>
+
+              <style>{`
+                @keyframes pop { 0% { transform: scale(0.4) rotate(-4deg); opacity: 0; } 40% { transform: scale(1.15) rotate(-4deg); opacity: 1; } 100% { transform: scale(1) rotate(-4deg); } }
+                button:active { transform: translate(2px,2px); box-shadow: 0 0 0 ${INK} !important; }
+                @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+              `}</style>
+            </div>
+          );
+        }
+
+      })();
+
+      const WatermelonJump = (() => {
+        // ===== Marker palette from the drawings =====
+        const MELON_RED = "#d9453a";
+        const MELON_GREEN = "#1f8f5f";
+        const GRASS = "#1f9e57";
+        const SUN = "#f2a51e";
+        const PURPLE = "#7a4fb5";
+        const BLUE = "#2e6fd9";
+        const CURTAIN = "#e8544a";
+        const CURTAIN_PINK = "#f6a3b8";
+        const INK = "#1b1b1b";
+        const PAPER = "#fdfaf2";
+        const SKY = "#fdfaf2";
+
+        const font = "'Comic Sans MS', 'Chalkboard SE', 'Comic Neue', cursive";
+
+        // ===== physics =====
+        const GRAVITY = 2400;       // px/s^2
+        const JUMP_V = -950;        // px/s
+        const MOVE_SPEED = 260;     // px/s left-right
+        const GROUND_FRAC = 0.82;   // ground line as fraction of play height
+        const START_SCROLL = 260;   // world scroll px/s
+        const SCROLL_RAMP = 8;      // +px/s per second
+
+        const W = 340, H = 300; // logical play area, scaled to fit
+
+        return function WatermelonJump({ db, user }) {
+          const [screen, setScreen] = useState("title"); // title | play | over
+          const [, tick] = useState(0);
+          const [best, setBest] = useState(0);
+          const [leaderboard, setLeaderboard] = useState([]);
+          const [nickname, setNickname] = useState(() => {
+            try {
+              return localStorage.getItem("pastryPupWatermelonName") || "";
+            } catch {
+              return "";
+            }
+          });
+          const [nicknameDraft, setNicknameDraft] = useState(nickname);
+          const [savedScore, setSavedScore] = useState(false);
+          const [isFullscreen, setIsFullscreen] = useState(false);
+
+          const g = useRef(null);
+          const keys = useRef({});
+          const lastT = useRef(0);
+          const rafRef = useRef();
+          const gameShellRef = useRef(null);
+
+          useEffect(() => {
+            const updateFullscreen = () => setIsFullscreen(!!document.fullscreenElement);
+            document.addEventListener("fullscreenchange", updateFullscreen);
+            return () => document.removeEventListener("fullscreenchange", updateFullscreen);
+          }, []);
+
+          const toggleFullscreen = () => {
+            if (document.fullscreenElement) {
+              document.exitFullscreen?.();
+              return;
+            }
+            const shell = gameShellRef.current;
+            const request = shell?.requestFullscreen || shell?.webkitRequestFullscreen;
+            if (request) request.call(shell)?.catch?.(() => {});
+          };
+
+          useEffect(() => {
+            if (!db) return;
+            const scoresRef = collection(
+              db,
+              "artifacts",
+              appId,
+              "public",
+              "data",
+              "watermelonScores"
+            );
+            const scoresQuery = query(
+              scoresRef,
+              orderBy("bestScore", "desc"),
+              limit(10)
+            );
+            return onSnapshot(
+              scoresQuery,
+              (snapshot) => {
+                setLeaderboard(
+                  snapshot.docs.map((scoreDoc) => ({
+                    id: scoreDoc.id,
+                    ...scoreDoc.data()
+                  }))
+                );
+              },
+              (error) => console.error("Watermelon leaderboard:", error)
+            );
+          }, [db]);
+
+          const persistScore = useCallback(
+            async (playerName) => {
+              const score = Math.floor(g.current?.score || 0);
+              setSavedScore(true);
+              if (!db || !user || !playerName) return;
+              try {
+                const scoreRef = doc(
+                  db,
+                  "artifacts",
+                  appId,
+                  "public",
+                  "data",
+                  "watermelonScores",
+                  user.uid
+                );
+                const existing = await getDoc(scoreRef);
+                if (!existing.exists() || score > (existing.data().bestScore || 0)) {
+                  await setDoc(scoreRef, {
+                    name: playerName,
+                    bestScore: score,
+                    updatedAt: Date.now()
+                  });
+                }
+              } catch (error) {
+                console.error("Watermelon score save:", error);
+              }
+            },
+            [db, user]
+          );
+
+          useEffect(() => {
+            if (screen === "over" && nickname) persistScore(nickname);
+          }, [screen, nickname, persistScore]);
+
+          const rememberNickname = (event) => {
+            event.preventDefault();
+            const name = nicknameDraft.trim().slice(0, 20);
+            if (!name) return;
+            try {
+              localStorage.setItem("pastryPupWatermelonName", name);
+            } catch {
+              // The game still works when private browsing blocks storage.
+            }
+            setNickname(name);
+            persistScore(name);
+          };
+
+          const groundY = H * GROUND_FRAC;
+
+          const newGame = () => ({
+            x: 70, y: groundY, vy: 0,
+            onGround: true, ducking: false,
+            score: 0, scroll: START_SCROLL,
+            obstacles: [], nextSpawn: 0.9, t: 0,
+            dead: false,
+          });
+
+          const startGame = () => {
+            g.current = newGame();
+            lastT.current = 0;
+            setSavedScore(false);
+            setScreen("play");
+          };
+
+          // ---- obstacle factory: utensils on ground, condiments flying ----
+          const spawn = (state) => {
+            const r = Math.random();
+            let ob;
+            if (r < 0.30) ob = { kind: "fork",   w: 26, h: 62, y: groundY, fly: false };
+            else if (r < 0.55) ob = { kind: "spoon", w: 26, h: 52, y: groundY, fly: false };
+            else if (r < 0.75) ob = { kind: "knife", w: 22, h: 70, y: groundY, fly: false };
+            // Low enough to hit a standing player, but high enough to duck under.
+            else if (r < 0.88) ob = { kind: "ketchup", w: 34, h: 26, y: groundY - 30, fly: true };
+            else ob = { kind: "mustard", w: 34, h: 26, y: groundY - 30, fly: true };
+            ob.x = W + 40;
+            ob.scored = false;
+            state.obstacles.push(ob);
+            state.nextSpawn = 0.75 + Math.random() * 0.9 - Math.min(0.35, state.t * 0.01);
+          };
+
+          // ---- input ----
+          const press = useCallback((k, down) => { keys.current[k] = down; }, []);
+          const jump = useCallback(() => {
+            const s = g.current;
+            if (screen !== "play" || !s || s.dead) return;
+            if (s.onGround) { s.vy = JUMP_V; s.onGround = false; s.ducking = false; }
+          }, [screen]);
+
+          useEffect(() => {
+            const down = (e) => {
+              const target = e.target;
+              if (
+                target instanceof HTMLInputElement ||
+                target instanceof HTMLTextAreaElement ||
+                target?.isContentEditable
+              ) {
+                return;
+              }
+              const k = e.key.toLowerCase();
+              if (screen !== "play" && (k === " " || k === "enter")) { startGame(); return; }
+              if (k === "arrowup" || k === "w" || k === " ") { e.preventDefault(); jump(); }
+              if (k === "arrowdown" || k === "s") { e.preventDefault(); press("duck", true); }
+              if (k === "arrowleft" || k === "a") { e.preventDefault(); press("left", true); }
+              if (k === "arrowright" || k === "d") { e.preventDefault(); press("right", true); }
+            };
+            const up = (e) => {
+              const k = e.key.toLowerCase();
+              if (k === "arrowdown" || k === "s") press("duck", false);
+              if (k === "arrowleft" || k === "a") press("left", false);
+              if (k === "arrowright" || k === "d") press("right", false);
+            };
+            window.addEventListener("keydown", down);
+            window.addEventListener("keyup", up);
+            return () => { window.removeEventListener("keydown", down); window.removeEventListener("keyup", up); };
+          }, [screen, jump, press]);
+
+          // ---- game loop ----
+          useEffect(() => {
+            const loop = (t) => {
+              rafRef.current = requestAnimationFrame(loop);
+              if (screen !== "play" || !g.current) { tick((n) => n + 1); return; }
+              if (!lastT.current) { lastT.current = t; return; }
+              let dt = Math.min(0.033, (t - lastT.current) / 1000);
+              lastT.current = t;
+              const s = g.current;
+              if (s.dead) { tick((n) => n + 1); return; }
+
+              s.t += dt;
+              s.scroll += SCROLL_RAMP * dt;
+              s.score += dt * 10;
+
+              // movement
+              s.ducking = !!keys.current.duck && s.onGround;
+              if (keys.current.left) s.x -= MOVE_SPEED * dt;
+              if (keys.current.right) s.x += MOVE_SPEED * dt;
+              s.x = Math.max(20, Math.min(W - 50, s.x));
+
+              // gravity
+              s.vy += GRAVITY * dt;
+              s.y += s.vy * dt;
+              if (s.y >= groundY) { s.y = groundY; s.vy = 0; s.onGround = true; }
+
+              // spawn + move obstacles
+              s.nextSpawn -= dt;
+              if (s.nextSpawn <= 0) spawn(s);
+              s.obstacles.forEach((o) => { o.x -= s.scroll * dt; });
+              s.obstacles = s.obstacles.filter((o) => o.x > -60);
+
+              // collision (player box)
+              const ph = s.ducking ? 26 : 46;
+              const pw = 34;
+              const px = s.x, py = s.y - ph;
+              for (const o of s.obstacles) {
+                const ox = o.x, oy = o.y - o.h, ow = o.w, oh = o.h;
+                const pad = 6; // forgiving hitbox
+                const overlapsX = px + pad < ox + ow - pad && px + pw - pad > ox + pad;
+                const overlapsY = py + pad < oy + oh - pad && py + ph - pad > oy + pad;
+                // Flying condiments are duck-under hazards: jumping does not clear them.
+                const hitCondiment = o.fly && overlapsX && !s.ducking;
+                const hitUtensil = !o.fly && overlapsX && overlapsY;
+                if (hitCondiment || hitUtensil) {
+                  s.dead = true;
+                  setBest((b) => Math.max(b, Math.floor(s.score)));
+                  setTimeout(() => setScreen("over"), 700);
+                }
+                if (!o.scored && o.x + o.w < s.x) { o.scored = true; s.score += 5; }
+              }
+              tick((n) => n + 1);
+            };
+            rafRef.current = requestAnimationFrame(loop);
+            return () => cancelAnimationFrame(rafRef.current);
+          }, [screen]);
+
+          // ===== SPRITES =====
+          const Watermelon = ({ s }) => {
+            const duck = s.ducking;
+            const hop = !s.onGround;
+            return (
+              <g transform={`translate(${s.x}, ${s.y}) scale(${duck ? 1.15 : 1}, ${duck ? 0.6 : 1})`}>
+                {/* legs */}
+                <path d={hop ? "M 10 -4 l -6 8 M 24 -4 l 6 8" : "M 12 -4 l -3 6 M 22 -4 l 3 6"}
+                  stroke="#8a5a2b" strokeWidth="4" strokeLinecap="round" fill="none" />
+                {/* rind */}
+                <path d="M 2 -12 Q 17 -2 32 -12 L 30 -4 Q 17 4 4 -4 Z" fill={MELON_GREEN} stroke={INK} strokeWidth="2.5" />
+                {/* flesh triangle */}
+                <path d="M 17 -46 L 33 -11 Q 17 -2 1 -11 Z" fill={MELON_RED} stroke={INK} strokeWidth="2.5" />
+                {/* seeds */}
+                <ellipse cx="12" cy="-22" rx="1.8" ry="2.8" fill={INK} />
+                <ellipse cx="22" cy="-18" rx="1.8" ry="2.8" fill={INK} />
+                <ellipse cx="17" cy="-32" rx="1.8" ry="2.8" fill={INK} />
+                {/* face */}
+                <circle cx="13" cy="-26" r="1.6" fill={INK} />
+                <circle cx="21" cy="-26" r="1.6" fill={INK} />
+                <path d="M 12 -20 Q 17 -15 22 -20" stroke={INK} strokeWidth="2" fill="none" strokeLinecap="round" />
+                {/* arms up like the drawing */}
+                <path d={hop ? "M 5 -28 l -10 -10 M 29 -28 l 10 -10" : "M 5 -26 l -9 -6 M 29 -26 l 9 -6"}
+                  stroke={MELON_GREEN} strokeWidth="4.5" strokeLinecap="round" fill="none" />
+              </g>
+            );
+          };
+
+          const Obstacle = ({ o }) => {
+            const base = `translate(${o.x}, ${o.y})`;
+            if (o.kind === "fork")
+              return (<g transform={base} stroke="#8b8b8b" strokeWidth="5" strokeLinecap="round">
+                <line x1="13" y1="0" x2="13" y2={-o.h + 18} />
+                <path d={`M 4 ${-o.h + 18} v -14 M 13 ${-o.h + 18} v -16 M 22 ${-o.h + 18} v -14 M 4 ${-o.h + 16} h 18`} fill="none" strokeWidth="3.5" />
+              </g>);
+            if (o.kind === "spoon")
+              return (<g transform={base}>
+                <line x1="13" y1="0" x2="13" y2={-o.h + 16} stroke="#8b8b8b" strokeWidth="5" strokeLinecap="round" />
+                <ellipse cx="13" cy={-o.h + 10} rx="11" ry="13" fill="#c9c9c9" stroke="#8b8b8b" strokeWidth="3" />
+              </g>);
+            if (o.kind === "knife")
+              return (<g transform={base}>
+                <line x1="11" y1="0" x2="11" y2="-26" stroke="#8b8b8b" strokeWidth="5" strokeLinecap="round" />
+                <path d={`M 4 -26 L 4 ${-o.h} Q 18 ${-o.h + 14} 18 -26 Z`} fill="#d8d8d8" stroke="#8b8b8b" strokeWidth="3" />
+              </g>);
+            // flying condiments
+            const col = o.kind === "ketchup" ? "#d9453a" : "#e8b31e";
+            const label = o.kind === "ketchup" ? "K" : "M";
+            return (<g transform={base}>
+              <rect x="0" y={-o.h} width={o.w} height={o.h} rx="8" fill={col} stroke={INK} strokeWidth="2.5" />
+              <rect x={o.w - 6} y={-o.h + 8} width="8" height="8" rx="2" fill={col} stroke={INK} strokeWidth="2" />
+              <text x={o.w / 2 - 4} y={-o.h / 2 + 5} fontFamily={font} fontWeight="700" fontSize="14" fill="#fff">{label}</text>
+            </g>);
+          };
+
+          const s = g.current;
+          const controlSize = "clamp(38px, 12vw, 46px)";
+
+          // ===== on-screen controls =====
+          const CtlBtn = ({ label, style, onDown, onUp, onTap }) => {
+            const hs = onTap
+              ? { onTouchStart: (e) => { e.preventDefault(); onTap(); }, onMouseDown: onTap }
+              : {
+                  onTouchStart: (e) => { e.preventDefault(); onDown(); },
+                  onTouchEnd: (e) => { e.preventDefault(); onUp(); },
+                  onMouseDown: onDown, onMouseUp: onUp, onMouseLeave: onUp,
+                };
+            return <button {...hs} style={{
+              fontFamily: font, fontWeight: 700, fontSize: "clamp(13px, 4vw, 15px)", color: "#fff",
+              background: PURPLE, border: `3px solid ${INK}`, borderRadius: 12,
+              boxShadow: `2px 2px 0 ${INK}`, touchAction: "none", userSelect: "none",
+              WebkitUserSelect: "none", cursor: "pointer", padding: 0, ...style,
+            }}>{label}</button>;
+          };
+
+          return (
+            <div style={{
+              width: "100%", minHeight: "100dvh", height: "100dvh", boxSizing: "border-box", background: "#2a2a2e", display: "flex",
+              alignItems: "center", justifyContent: "center", padding: "clamp(6px, 2vw, 12px)",
+              overflowY: "auto", fontFamily: font,
+            }} ref={gameShellRef}>
+              <button
+                type="button"
+                onClick={toggleFullscreen}
+                aria-label={isFullscreen ? "Exit full screen" : "Enter full screen"}
+                style={{
+                  position: "fixed", right: 12, bottom: 12, zIndex: 20,
+                  border: `3px solid ${INK}`, borderRadius: 10, background: PAPER,
+                  color: INK, padding: "7px 10px", fontFamily: font, fontWeight: 700,
+                  fontSize: 12, cursor: "pointer", boxShadow: `2px 2px 0 ${INK}`,
+                }}
+              >
+                {isFullscreen ? "exit full screen" : "full screen"}
+              </button>
+              {/* ===== Paper Game Boy console, like the drawing ===== */}
+              <div style={{
+                background: PAPER, border: `4px solid ${INK}`, borderRadius: "18px 18px 26px 26px",
+                boxSizing: "border-box", padding: "clamp(8px, 3vw, 12px) clamp(8px, 3vw, 12px) clamp(12px, 4vw, 16px)",
+                width: "min(100%, 520px)",
+                boxShadow: "6px 8px 0 rgba(0,0,0,0.45)",
+              }}>
+                {/* screen bezel with theater curtains */}
+                <div style={{ position: "relative", border: `4px solid ${INK}`, borderRadius: 10, overflow: "hidden", background: SKY }}>
+                  {/* top curtain rail */}
+                  <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 12, background: SUN, borderBottom: `3px solid ${INK}`, zIndex: 5 }} />
+                  <div style={{ position: "absolute", top: 12, left: 0, width: 26, bottom: 0, background: `linear-gradient(90deg, ${CURTAIN}, ${CURTAIN_PINK})`, borderRight: `3px solid ${INK}`, zIndex: 5 }} />
+                  <div style={{ position: "absolute", top: 12, right: 0, width: 26, bottom: 0, background: `linear-gradient(-90deg, ${CURTAIN}, ${CURTAIN_PINK})`, borderLeft: `3px solid ${INK}`, zIndex: 5 }} />
+
+                  {/* game screen */}
+                  <svg viewBox={`0 0 ${W} ${H}`} style={{ display: "block", width: "100%", height: "auto" }}>
+                    {/* sun */}
+                    <g transform="translate(300, 42)">
+                      <circle r="18" fill={SUN} stroke={INK} strokeWidth="2.5" />
+                      {[...Array(8)].map((_, i) => {
+                        const a = (i / 8) * Math.PI * 2;
+                        return <line key={i} x1={Math.cos(a) * 22} y1={Math.sin(a) * 22} x2={Math.cos(a) * 30} y2={Math.sin(a) * 30} stroke={SUN} strokeWidth="4" strokeLinecap="round" />;
+                      })}
+                    </g>
+
+                    {screen === "title" && (
+                      <g>
+                        <text x={W / 2} y="100" textAnchor="middle" fontFamily={font} fontWeight="700" fontSize="34" fill={MELON_RED} stroke={INK} strokeWidth="1" transform={`rotate(-2 ${W / 2} 100)`}>Watermelon</text>
+                        <text x={W / 2} y="140" textAnchor="middle" fontFamily={font} fontWeight="700" fontSize="34" fill={MELON_GREEN} stroke={INK} strokeWidth="1" transform={`rotate(1 ${W / 2} 140)`}>Jump!</text>
+                        <text x={W / 2} y="180" textAnchor="middle" fontFamily={font} fontSize="14" fill={INK}>Jump over the utensils!</text>
+                        <text x={W / 2} y="200" textAnchor="middle" fontFamily={font} fontSize="14" fill={INK}>Duck under flying condiments!</text>
+                        {/* hearts like the drawing */}
+                        <text x="60" y="120" fontSize="20">{"\u{1F495}"}</text>
+                        <text x="265" y="170" fontSize="20">{"\u{1F495}"}</text>
+                      </g>
+                    )}
+
+                    {screen === "over" && s && (
+                      <g>
+                        <text x={W / 2} y="105" textAnchor="middle" fontFamily={font} fontWeight="700" fontSize="30" fill={INK}>SPLAT!</text>
+                        <text x={W / 2} y="140" textAnchor="middle" fontFamily={font} fontSize="18" fill={INK}>Score: {Math.floor(s.score)}</text>
+                        <text x={W / 2} y="165" textAnchor="middle" fontFamily={font} fontSize="15" fill={PURPLE}>Best: {best}</text>
+                      </g>
+                    )}
+
+                    {/* grass ground - scribble style */}
+                    <rect x="0" y={groundY} width={W} height={H - groundY} fill={GRASS} />
+                    {[...Array(24)].map((_, i) => (
+                      <path key={i} d={`M ${i * 15 + ((s ? -s.t * 60 : 0) % 15)} ${groundY} q 4 -12 8 0`} stroke={GRASS} strokeWidth="4" fill="none" />
+                    ))}
+                    <line x1="0" y1={groundY} x2={W} y2={groundY} stroke={INK} strokeWidth="3" />
+
+                    {/* obstacles + player */}
+                    {s && screen === "play" && s.obstacles.map((o, i) => <Obstacle key={i} o={o} />)}
+                    {s && screen === "play" && <Watermelon s={s} />}
+
+                    {/* score */}
+                    {s && screen === "play" && (
+                      <text x="14" y="28" fontFamily={font} fontWeight="700" fontSize="18" fill={INK}>{"\u2B50"} {Math.floor(s.score)}</text>
+                    )}
+                  </svg>
+                </div>
+
+                {/* ===== console controls, like the drawing ===== */}
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: "clamp(10px, 3vw, 14px)", gap: "clamp(8px, 3vw, 14px)" }}>
+                  {/* purple d-pad */}
+                  <div style={{ display: "grid", gridTemplateColumns: `repeat(3, ${controlSize})`, gridTemplateRows: `repeat(3, ${controlSize})`, gap: "clamp(1px, 0.6vw, 2px)", flexShrink: 0 }}>
+                    <div />
+                    <CtlBtn label={"\u25B2"} onTap={jump} style={{ gridColumn: 2 }} />
+                    <div />
+                    <CtlBtn label={"\u25C0"} onDown={() => press("left", true)} onUp={() => press("left", false)} />
+                    <div style={{ background: PURPLE, border: `3px solid ${INK}`, borderRadius: 6 }} />
+                    <CtlBtn label={"\u25B6"} onDown={() => press("right", true)} onUp={() => press("right", false)} />
+                    <div />
+                    <CtlBtn label={"\u25BC"} onDown={() => press("duck", true)} onUp={() => press("duck", false)} style={{ gridColumn: 2 }} />
+                    <div />
+                  </div>
+
+                  {/* start pill + green speaker */}
+                  <div style={{ display: "flex", flexDirection: "column", gap: "clamp(7px, 2vw, 10px)", alignItems: "center", minWidth: 0 }}>
+                    <button onClick={startGame} style={{
+                      fontFamily: font, fontWeight: 700, fontSize: "clamp(14px, 4vw, 16px)", color: "#fff",
+                      background: BLUE, border: `3px solid ${INK}`, borderRadius: 20,
+                      padding: "8px clamp(16px, 7vw, 26px)", boxShadow: `2px 2px 0 ${INK}`, cursor: "pointer",
+                      transform: "rotate(-1deg)",
+                    }}>{screen === "play" ? "restart" : "Start!"}</button>
+                    {/* green speaker grille with the :0! face, like the drawing */}
+                    <div style={{
+                      background: MELON_GREEN, border: `3px solid ${INK}`, borderRadius: 8,
+                      padding: "6px clamp(10px, 4vw, 14px)", fontFamily: font, fontWeight: 700, fontSize: "clamp(15px, 4.5vw, 18px)",
+                      color: INK, letterSpacing: 3, transform: "rotate(1deg)",
+                    }}>: 0 !</div>
+                  </div>
+                </div>
+
+                <div style={{ textAlign: "center", marginTop: 10, fontSize: "clamp(10px, 3.2vw, 12px)", color: "#666", fontFamily: font }}>
+                  keyboard: left/right move | up/space jump | down duck
+                </div>
+                {screen === "over" && !nickname && (
+                  <form
+                    onSubmit={rememberNickname}
+                    style={{
+                      display: "flex",
+                      gap: 8,
+                      marginTop: 12,
+                      padding: 10,
+                      background: "#fff",
+                      border: `3px solid ${INK}`,
+                      borderRadius: 12
+                    }}
+                  >
+                    <input
+                      value={nicknameDraft}
+                      onChange={(event) => setNicknameDraft(event.target.value)}
+                      maxLength="20"
+                      aria-label="Your nickname"
+                      placeholder="Your nickname"
+                      autoFocus
+                      style={{
+                        minWidth: 0,
+                        flex: 1,
+                        border: `2px solid ${PURPLE}`,
+                        borderRadius: 8,
+                        padding: "8px 10px",
+                        fontFamily: font,
+                        fontWeight: 700
+                      }}
+                    />
+                    <button
+                      type="submit"
+                      style={{
+                        border: `3px solid ${INK}`,
+                        borderRadius: 8,
+                        background: MELON_GREEN,
+                        color: "#fff",
+                        padding: "8px 12px",
+                        fontFamily: font,
+                        fontWeight: 700,
+                        cursor: "pointer"
+                      }}
+                    >
+                      Save
+                    </button>
+                  </form>
+                )}
+                {screen === "over" && savedScore && (
+                  <div style={{ marginTop: 10, textAlign: "center", fontSize: 13, color: MELON_GREEN }}>
+                    {db ? "Best score saved!" : "Nickname remembered on this device."}
+                  </div>
+                )}
+                {(screen === "title" || screen === "over") && leaderboard.length > 0 && (
+                  <div
+                    style={{
+                      marginTop: 12,
+                      padding: 10,
+                      background: "#fff",
+                      border: `3px solid ${INK}`,
+                      borderRadius: 12,
+                      maxHeight: "min(22dvh, 190px)",
+                      overflowY: "auto",
+                      WebkitOverflowScrolling: "touch"
+                    }}
+                  >
+                    <div style={{ textAlign: "center", fontWeight: 700, color: PURPLE }}>
+                      Top Watermelon Jumpers
+                    </div>
+                    <ol style={{ margin: "8px 0 0", paddingLeft: 28, fontSize: "clamp(12px, 3.5vw, 13px)" }}>
+                      {leaderboard.map((entry) => (
+                        <li key={entry.id}>
+                          <span style={{ fontWeight: 700 }}>{entry.name || "Player"}</span>
+                          {" — "}
+                          {entry.bestScore}
+                        </li>
+                      ))}
+                    </ol>
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        }
+
+      })();
+
+      const ArcadeGameView = ({ children }) => (
+        <div className="relative min-h-screen bg-slate-900">
+          <a
+            href={ROUTES.arcade}
+            className="fixed right-4 top-4 z-[200] rounded-full bg-white/95 px-5 py-3 font-black text-slate-700 shadow-xl transition hover:scale-105 hover:text-pink-500"
+          >
+            Exit to Arcade
+          </a>
+          {children}
+        </div>
+      );
+
+      createRoot(document.getElementById("root")).render(<App />);
