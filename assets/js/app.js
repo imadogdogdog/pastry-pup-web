@@ -150,7 +150,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
                 </ArcadeGameView>
               );
             default:
-              return <HomeView />;
+              return HomeView();
           }
         };
 
