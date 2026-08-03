@@ -52,6 +52,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
         const [isStaffModalOpen, setIsStaffModalOpen] = useState(false);
         const [isLoggedIn, setIsLoggedIn] = useState(false);
         const [password, setPassword] = useState("");
+        const [isPasswordVisible, setIsPasswordVisible] = useState(false);
         const [newItem, setNewItem] = useState({
           name: "",
           description: "",
@@ -92,8 +93,8 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
         }, [db, user]);
 
         const handleLogin = () => {
-          if (password === "pickles!") setIsLoggedIn(true);
-          else alert("Wrong password! Hint: cucumber");
+          if (password === "Pickles!") setIsLoggedIn(true);
+          else alert("Wrong password!");
         };
 
         const addItem = async () => {
@@ -355,14 +356,25 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
                   {!isLoggedIn ? (
                     <div className="py-4 text-center">
                       <h3 className="mb-6 text-3xl font-black">Staff Portal</h3>
-                      <input
-                        type="password"
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        onKeyDown={(e) => e.key === "Enter" && handleLogin()}
-                        placeholder="Secret Password"
-                        className="mb-4 w-full rounded-3xl border-4 border-slate-50 p-5 text-center text-xl font-bold outline-none focus:border-pink-300"
-                      />
+                      <div className="relative mb-4">
+                        <input
+                          type={isPasswordVisible ? "text" : "password"}
+                          value={password}
+                          onChange={(e) => setPassword(e.target.value)}
+                          onKeyDown={(e) => e.key === "Enter" && handleLogin()}
+                          placeholder="Secret Password"
+                          className="w-full rounded-3xl border-4 border-slate-50 py-5 pl-5 pr-24 text-center text-xl font-bold outline-none focus:border-pink-300"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setIsPasswordVisible((visible) => !visible)}
+                          aria-label={isPasswordVisible ? "Hide password" : "Show password"}
+                          aria-pressed={isPasswordVisible}
+                          className="absolute right-5 top-1/2 -translate-y-1/2 rounded-xl px-3 py-2 text-sm font-black text-pink-600 hover:bg-pink-50"
+                        >
+                          {isPasswordVisible ? "Hide" : "Show"}
+                        </button>
+                      </div>
                       <button
                         onClick={handleLogin}
                         className="w-full rounded-3xl bg-pink-500 py-5 font-black text-white shadow-lg hover:bg-pink-600"
