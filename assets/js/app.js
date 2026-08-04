@@ -429,16 +429,16 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
             <section className="bg-white/60 px-6 py-24" aria-labelledby="latest-bakes-heading">
               <div className="mx-auto max-w-7xl">
                 <p className="mb-3 text-center text-sm font-black uppercase tracking-[0.25em] text-pink-500">
-                  From our kitchen
+                  Coming soon
                 </p>
                 <h2
                   id="latest-bakes-heading"
                   className="mb-5 text-center text-5xl font-black text-slate-800"
                 >
-                  Latest Bakes
+                  Upcoming Treats
                 </h2>
                 <p className="mx-auto mb-12 max-w-2xl text-center text-lg font-medium text-slate-500">
-                  A peek at the newest treats coming out of the Pastry Pup kitchen.
+                  A peek at the treats we are planning next for the Pastry Pup menu.
                 </p>
                 <div className="grid gap-8 md:grid-cols-3">
                   {latestBakes.map((photo) => (
