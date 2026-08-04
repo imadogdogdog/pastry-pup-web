@@ -34,6 +34,8 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
       const appId = "pastry-pup-final";
       const staffEmail = "lucy.the.headchef@gmail.com";
       const staffUid = "6flMuzAdeBZBpyBMKz0XP8DAvGt1";
+      const playerProfilesKey = "pastryPupPlayerProfiles";
+      const activePlayerKey = "pastryPupActivePlayer";
       const fallbackLogo =
         "https://placehold.co/300x300/f9a8d4/ffffff?text=Pastry+Pup";
       const ROUTES = {
@@ -48,6 +50,36 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
       };
 
       const latestBakes = [];
+
+      const makePlayerId = () => {
+        if (globalThis.crypto?.randomUUID) {
+          return globalThis.crypto.randomUUID().replaceAll("-", "");
+        }
+        return `${Date.now().toString(36)}${Math.random().toString(36).slice(2)}`;
+      };
+
+      const loadPlayerProfiles = () => {
+        try {
+          const saved = JSON.parse(localStorage.getItem(playerProfilesKey) || "[]");
+          if (Array.isArray(saved) && saved.length > 0) {
+            return saved.filter(
+              (profile) =>
+                profile &&
+                typeof profile.id === "string" &&
+                typeof profile.name === "string" &&
+                profile.name.trim()
+            );
+          }
+          const legacyName = (
+            localStorage.getItem("pastryPupWatermelonName") || ""
+          ).trim();
+          return legacyName
+            ? [{ id: makePlayerId(), name: legacyName.slice(0, 20) }]
+            : [];
+        } catch {
+          return [];
+        }
+      };
 
       const emptyMenuItem = {
         name: "",
@@ -102,8 +134,23 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
           reader.readAsDataURL(file);
         });
 
-      const saveBestArcadeScore = async (db, user, gameId, score, details = {}) => {
-        if (!db || !user || !Number.isFinite(score) || score < 0) return false;
+      const saveBestArcadeScore = async (
+        db,
+        user,
+        player,
+        gameId,
+        score,
+        details = {}
+      ) => {
+        if (
+          !db ||
+          !user ||
+          !player ||
+          !Number.isFinite(score) ||
+          score < 0
+        ) {
+          return false;
+        }
         const scoreRef = doc(
           db,
           "artifacts",
@@ -113,13 +160,16 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
           "arcadeScores",
           gameId,
           "players",
-          user.uid
+          `${user.uid}_${player.id}`
         );
         const existing = await getDoc(scoreRef);
         if (existing.exists() && score <= (existing.data().bestScore || 0)) {
           return true;
         }
         await setDoc(scoreRef, {
+          name: player.name,
+          ownerUid: user.uid,
+          playerId: player.id,
           bestScore: Math.floor(score),
           updatedAt: Date.now(),
           ...details
@@ -142,7 +192,43 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
         const [isPreparingImage, setIsPreparingImage] = useState(false);
         const [menuEditorMessage, setMenuEditorMessage] = useState("");
         const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+        const [playerProfiles, setPlayerProfiles] = useState(loadPlayerProfiles);
+        const [activePlayerId, setActivePlayerId] = useState(() => {
+          try {
+            return localStorage.getItem(activePlayerKey) || "";
+          } catch {
+            return "";
+          }
+        });
+        const [isPlayerModalOpen, setIsPlayerModalOpen] = useState(false);
+        const [playerNameDraft, setPlayerNameDraft] = useState("");
+        const [playerError, setPlayerError] = useState("");
         const page = document.body.dataset.page || "home";
+
+        const player =
+          playerProfiles.find((profile) => profile.id === activePlayerId) || null;
+
+        useEffect(() => {
+          try {
+            localStorage.setItem(playerProfilesKey, JSON.stringify(playerProfiles));
+            if (activePlayerId) {
+              localStorage.setItem(activePlayerKey, activePlayerId);
+            } else {
+              localStorage.removeItem(activePlayerKey);
+            }
+          } catch {
+            // Player profiles remain available for the current page visit.
+          }
+        }, [activePlayerId, playerProfiles]);
+
+        useEffect(() => {
+          if (
+            playerProfiles.length > 0 &&
+            !playerProfiles.some((profile) => profile.id === activePlayerId)
+          ) {
+            setActivePlayerId(playerProfiles[0].id);
+          }
+        }, [activePlayerId, playerProfiles]);
 
         useEffect(() => {
           if (!firebaseConfig.apiKey) return;
@@ -216,6 +302,35 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
           await signOut(auth);
           setPassword("");
           setLoginError("");
+        };
+
+        const choosePlayer = (profileId) => {
+          setActivePlayerId(profileId);
+          setIsPlayerModalOpen(false);
+          setPlayerNameDraft("");
+          setPlayerError("");
+        };
+
+        const createPlayer = (event) => {
+          event.preventDefault();
+          const name = playerNameDraft.trim().replace(/\s+/g, " ").slice(0, 20);
+          if (!name) {
+            setPlayerError("Enter a player name.");
+            return;
+          }
+          const existing = playerProfiles.find(
+            (profile) => profile.name.toLowerCase() === name.toLowerCase()
+          );
+          if (existing) {
+            choosePlayer(existing.id);
+            return;
+          }
+          const newPlayer = { id: makePlayerId(), name };
+          setPlayerProfiles((profiles) => [...profiles, newPlayer]);
+          setActivePlayerId(newPlayer.id);
+          setIsPlayerModalOpen(false);
+          setPlayerNameDraft("");
+          setPlayerError("");
         };
 
         const resetMenuEditor = () => {
@@ -302,11 +417,11 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
         const renderView = () => {
           switch (page) {
             case "arcade":
-              return <ArcadeMenu />;
+              return <ArcadeMenu db={db} player={player} openPlayerLogin={() => setIsPlayerModalOpen(true)} />;
             case "catching-treats":
-              return <CatchingTreatsGame db={db} user={user} />;
+              return <CatchingTreatsGame db={db} user={user} player={player} />;
             case "treat-tap-revolution":
-              return <TreatTapRevolution db={db} user={user} />;
+              return <TreatTapRevolution db={db} user={user} player={player} />;
             case "wings-of-fire-quiz":
               return <PersonalityQuiz type="wof" />;
             case "disney-personality":
@@ -320,7 +435,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
             case "watermelon-jump":
               return (
                 <ArcadeGameView>
-                  <WatermelonJump db={db} user={user} />
+                  <WatermelonJump db={db} user={user} player={player} />
                 </ArcadeGameView>
               );
             default:
@@ -778,7 +893,80 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
           </div>
         );
 
-        return renderView();
+        return (
+          <>
+            {renderView()}
+            {page !== "home" && page !== "arcade" && (
+              <button
+                type="button"
+                onClick={() => setIsPlayerModalOpen(true)}
+                className="fixed left-4 top-4 z-[210] rounded-full bg-purple-600 px-5 py-3 text-sm font-black text-white shadow-xl transition hover:bg-purple-700"
+              >
+                {player ? `Player: ${player.name}` : "Player Login"}
+              </button>
+            )}
+            {isPlayerModalOpen && (
+              <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+                <div className="relative w-full max-w-md rounded-[2.5rem] bg-white p-8 text-slate-800 shadow-2xl">
+                  <button
+                    type="button"
+                    onClick={() => setIsPlayerModalOpen(false)}
+                    className="absolute right-6 top-4 text-4xl text-slate-300 hover:text-slate-600"
+                    aria-label="Close player login"
+                  >
+                    &times;
+                  </button>
+                  <h2 className="mb-2 text-3xl font-black text-purple-600">Player Login</h2>
+                  <p className="mb-6 font-medium text-slate-500">
+                    Choose a player on this device or make a new one. Each player keeps a separate best score.
+                  </p>
+                  {playerProfiles.length > 0 && (
+                    <div className="mb-6 space-y-2">
+                      {playerProfiles.map((profile) => (
+                        <button
+                          key={profile.id}
+                          type="button"
+                          onClick={() => choosePlayer(profile.id)}
+                          className={`w-full rounded-2xl px-5 py-3 text-left font-black transition ${
+                            profile.id === player?.id
+                              ? "bg-purple-600 text-white"
+                              : "bg-purple-50 text-purple-700 hover:bg-purple-100"
+                          }`}
+                        >
+                          {profile.name}
+                          {profile.id === player?.id ? " (playing now)" : ""}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  <form onSubmit={createPlayer} className="space-y-3">
+                    <label htmlFor="new-player-name" className="block text-sm font-black text-slate-600">
+                      New player name
+                    </label>
+                    <input
+                      id="new-player-name"
+                      value={playerNameDraft}
+                      onChange={(event) => {
+                        setPlayerNameDraft(event.target.value);
+                        setPlayerError("");
+                      }}
+                      maxLength="20"
+                      placeholder="Nickname"
+                      className="w-full rounded-2xl border-4 border-purple-100 p-4 text-lg font-bold outline-none focus:border-purple-300"
+                    />
+                    {playerError && <p className="font-bold text-red-600">{playerError}</p>}
+                    <button
+                      type="submit"
+                      className="w-full rounded-2xl bg-pink-500 px-5 py-4 font-black text-white shadow-lg hover:bg-pink-600"
+                    >
+                      Create &amp; Play
+                    </button>
+                  </form>
+                </div>
+              </div>
+            )}
+          </>
+        );
       };
 
       const MenuItem = ({ name, desc, description, price, img, isSignature }) => (
@@ -810,7 +998,118 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
         </div>
       );
 
-      const ArcadeMenu = () => (
+      const ArcadeLeaderboards = ({ db }) => {
+        const [boards, setBoards] = useState({
+          "catching-treats": [],
+          "treat-tap-revolution": [],
+          "watermelon-jump": []
+        });
+        const [loadErrors, setLoadErrors] = useState({});
+
+        useEffect(() => {
+          if (!db) return undefined;
+          const boardRefs = {
+            "catching-treats": collection(
+              db,
+              "artifacts",
+              appId,
+              "public",
+              "data",
+              "arcadeScores",
+              "catching-treats",
+              "players"
+            ),
+            "treat-tap-revolution": collection(
+              db,
+              "artifacts",
+              appId,
+              "public",
+              "data",
+              "arcadeScores",
+              "treat-tap-revolution",
+              "players"
+            ),
+            "watermelon-jump": collection(
+              db,
+              "artifacts",
+              appId,
+              "public",
+              "data",
+              "watermelonScores"
+            )
+          };
+
+          const unsubscribes = Object.entries(boardRefs).map(([gameId, boardRef]) =>
+            onSnapshot(
+              query(boardRef, orderBy("bestScore", "desc"), limit(10)),
+              (snapshot) => {
+                setBoards((current) => ({
+                  ...current,
+                  [gameId]: snapshot.docs.map((scoreDoc) => ({
+                    id: scoreDoc.id,
+                    ...scoreDoc.data()
+                  }))
+                }));
+                setLoadErrors((current) => ({ ...current, [gameId]: false }));
+              },
+              (error) => {
+                console.error(`${gameId} leaderboard:`, error);
+                setLoadErrors((current) => ({ ...current, [gameId]: true }));
+              }
+            )
+          );
+          return () => unsubscribes.forEach((unsubscribe) => unsubscribe());
+        }, [db]);
+
+        const boardDetails = [
+          { id: "catching-treats", title: "Catching Treats", color: "text-pink-500" },
+          { id: "watermelon-jump", title: "Watermelon Jump", color: "text-green-600" },
+          { id: "treat-tap-revolution", title: "Treat Tap Revolution", color: "text-fuchsia-600" }
+        ];
+
+        return (
+          <section className="mt-16 w-full max-w-6xl" aria-labelledby="leaderboards-heading">
+            <h2 id="leaderboards-heading" className="mb-3 text-center text-4xl font-black text-slate-800">
+              Arcade Leaderboards
+            </h2>
+            <p className="mb-8 text-center font-medium text-slate-500">
+              Each player profile keeps its own best score.
+            </p>
+            <div className="grid gap-6 lg:grid-cols-3">
+              {boardDetails.map((board) => (
+                <div key={board.id} className="rounded-[2rem] bg-white p-6 shadow-xl">
+                  <h3 className={`mb-4 text-center text-xl font-black ${board.color}`}>
+                    {board.title}
+                  </h3>
+                  {loadErrors[board.id] ? (
+                    <p className="rounded-xl bg-red-50 p-4 text-center font-bold text-red-600">
+                      Scores could not be loaded.
+                    </p>
+                  ) : boards[board.id].length === 0 ? (
+                    <p className="rounded-xl bg-slate-50 p-4 text-center font-bold text-slate-400">
+                      No scores yet. Be the first!
+                    </p>
+                  ) : (
+                    <ol className="space-y-2">
+                      {boards[board.id].map((entry, index) => (
+                        <li key={entry.id} className="flex items-center gap-3 rounded-xl bg-slate-50 px-4 py-3">
+                          <span className="w-6 font-black text-slate-400">{index + 1}</span>
+                          <span className="min-w-0 flex-1 truncate font-black text-slate-700">
+                            {entry.name || "Player"}
+                          </span>
+                          <span className="font-black text-purple-600">{entry.bestScore}</span>
+                        </li>
+                      ))}
+                    </ol>
+                  )}
+                </div>
+              ))}
+            </div>
+          </section>
+        );
+      };
+
+      const ArcadeMenu = ({ db, player, openPlayerLogin }) => (
         <div className="flex min-h-screen flex-col items-center bg-[#FEFCE8] p-10">
           <div className="mb-8 flex flex-col items-center gap-4 text-center sm:flex-row">
             <img
@@ -825,6 +1124,13 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
               Pastry Pup Arcade
             </h1>
           </div>
+          <button
+            type="button"
+            onClick={openPlayerLogin}
+            className="mb-10 rounded-full bg-purple-600 px-7 py-3 font-black text-white shadow-xl transition hover:bg-purple-700"
+          >
+            {player ? `Playing as ${player.name} · Switch Player` : "Player Login"}
+          </button>
           <div className="grid w-full max-w-6xl grid-cols-1 gap-8 md:grid-cols-3">
             <ArcadeCard
               title="Catching Treats"
@@ -869,6 +1175,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
               href={ROUTES.treatTapRevolution}
             />
           </div>
+          <ArcadeLeaderboards db={db} />
           <a
             href={ROUTES.home}
             className="mt-20 text-xl font-black text-slate-400 underline transition hover:text-pink-500"
@@ -1070,32 +1377,34 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
         );
       };
 
-      const CatchingTreatsGame = ({ db, user }) => {
+      const CatchingTreatsGame = ({ db, user, player }) => {
         const canvasRef = useRef(null);
         const [score, setScore] = useState(0);
         const [level, setLevel] = useState(1);
         const [lives, setLives] = useState(0);
         const [gameStatus, setGameStatus] = useState("start");
         const [scoreSaved, setScoreSaved] = useState(false);
+        const [scorePlayer, setScorePlayer] = useState(null);
 
         const startGame = (startingLives) => {
           setLives(startingLives);
           setScore(0);
           setLevel(1);
           setScoreSaved(false);
+          setScorePlayer(player);
           setGameStatus("playing");
         };
 
         useEffect(() => {
           if (gameStatus !== "over" || score <= 0) return;
           let cancelled = false;
-          saveBestArcadeScore(db, user, "catching-treats", score, { level })
+          saveBestArcadeScore(db, user, scorePlayer, "catching-treats", score, { level })
             .then((saved) => !cancelled && setScoreSaved(saved))
             .catch((error) => console.error("Catching Treats score save:", error));
           return () => {
             cancelled = true;
           };
-        }, [db, gameStatus, level, score, user]);
+        }, [db, gameStatus, level, score, scorePlayer, user]);
 
         useEffect(() => {
           if (gameStatus !== "playing") return undefined;
@@ -1286,6 +1595,11 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
                   {scoreSaved && (
                     <p className="font-bold text-green-600">Best score saved online!</p>
                   )}
+                  {!scorePlayer && (
+                    <p className="font-bold text-purple-600">
+                      Use Player Login to save this score.
+                    </p>
+                  )}
                   <button
                     onClick={() => setGameStatus("start")}
                     className="rounded-3xl bg-pink-500 px-10 py-5 text-2xl font-black text-white shadow-xl hover:bg-pink-600"
@@ -1305,7 +1619,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
         );
       };
 
-      const TreatTapRevolution = ({ db, user }) => {
+      const TreatTapRevolution = ({ db, user, player }) => {
         const canvasRef = useRef(null);
         const audioRef = useRef(null);
         const [gameStatus, setGameStatus] = useState("start");
@@ -1315,6 +1629,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
         const [bestCombo, setBestCombo] = useState(0);
         const [lives, setLives] = useState(5);
         const [scoreSaved, setScoreSaved] = useState(false);
+        const [scorePlayer, setScorePlayer] = useState(null);
 
         const modes = {
           easy: { label: "Easy", hands: "1 hand", lanes: 2, bpm: 100, lives: 6, chords: false },
@@ -1344,13 +1659,14 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
           setBestCombo(0);
           setLives(modes[mode].lives);
           setScoreSaved(false);
+          setScorePlayer(player);
           setGameStatus("playing");
         };
 
         useEffect(() => {
           if (gameStatus !== "over" || score <= 0) return;
           let cancelled = false;
-          saveBestArcadeScore(db, user, "treat-tap-revolution", score, {
+          saveBestArcadeScore(db, user, scorePlayer, "treat-tap-revolution", score, {
             difficulty,
             bestCombo
           })
@@ -1359,7 +1675,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
           return () => {
             cancelled = true;
           };
-        }, [bestCombo, db, difficulty, gameStatus, score, user]);
+        }, [bestCombo, db, difficulty, gameStatus, score, scorePlayer, user]);
 
         useEffect(() => {
           if (gameStatus !== "playing") return undefined;
@@ -1573,6 +1889,11 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
                   <p className="font-bold text-purple-200">Best combo: {bestCombo}</p>
                   {scoreSaved && (
                     <p className="font-bold text-green-300">Best score saved online!</p>
+                  )}
+                  {!scorePlayer && (
+                    <p className="font-bold text-purple-200">
+                      Use Player Login to save this score.
+                    </p>
                   )}
                   <button onClick={() => setGameStatus("start")} className="rounded-2xl bg-fuchsia-500 px-8 py-4 text-xl font-black shadow-lg hover:bg-fuchsia-400">Play Again</button>
                 </div>
@@ -2015,20 +2336,13 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 
         const W = 340, H = 300; // logical play area, scaled to fit
 
-        return function WatermelonJump({ db, user }) {
+        return function WatermelonJump({ db, user, player }) {
           const [screen, setScreen] = useState("title"); // title | play | over
           const [, tick] = useState(0);
           const [best, setBest] = useState(0);
           const [leaderboard, setLeaderboard] = useState([]);
-          const [nickname, setNickname] = useState(() => {
-            try {
-              return localStorage.getItem("pastryPupWatermelonName") || "";
-            } catch {
-              return "";
-            }
-          });
-          const [nicknameDraft, setNicknameDraft] = useState(nickname);
           const [savedScore, setSavedScore] = useState(false);
+          const [scorePlayer, setScorePlayer] = useState(null);
           const [isFullscreen, setIsFullscreen] = useState(false);
 
           const g = useRef(null);
@@ -2083,10 +2397,9 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
           }, [db]);
 
           const persistScore = useCallback(
-            async (playerName) => {
+            async () => {
               const score = Math.floor(g.current?.score || 0);
-              setSavedScore(true);
-              if (!db || !user || !playerName) return;
+              if (!db || !user || !scorePlayer) return;
               try {
                 const scoreRef = doc(
                   db,
@@ -2095,39 +2408,29 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
                   "public",
                   "data",
                   "watermelonScores",
-                  user.uid
+                  `${user.uid}_${scorePlayer.id}`
                 );
                 const existing = await getDoc(scoreRef);
                 if (!existing.exists() || score > (existing.data().bestScore || 0)) {
                   await setDoc(scoreRef, {
-                    name: playerName,
+                    name: scorePlayer.name,
+                    ownerUid: user.uid,
+                    playerId: scorePlayer.id,
                     bestScore: score,
                     updatedAt: Date.now()
                   });
                 }
+                setSavedScore(true);
               } catch (error) {
                 console.error("Watermelon score save:", error);
               }
             },
-            [db, user]
+            [db, scorePlayer, user]
           );
 
           useEffect(() => {
-            if (screen === "over" && nickname) persistScore(nickname);
-          }, [screen, nickname, persistScore]);
-
-          const rememberNickname = (event) => {
-            event.preventDefault();
-            const name = nicknameDraft.trim().slice(0, 20);
-            if (!name) return;
-            try {
-              localStorage.setItem("pastryPupWatermelonName", name);
-            } catch {
-              // The game still works when private browsing blocks storage.
-            }
-            setNickname(name);
-            persistScore(name);
-          };
+            if (screen === "over" && scorePlayer) persistScore();
+          }, [screen, scorePlayer, persistScore]);
 
           const groundY = H * GROUND_FRAC;
 
@@ -2143,6 +2446,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
             g.current = newGame();
             lastT.current = 0;
             setSavedScore(false);
+            setScorePlayer(player);
             setScreen("play");
           };
 
@@ -2468,59 +2772,17 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
                 <div style={{ textAlign: "center", marginTop: 10, fontSize: "clamp(10px, 3.2vw, 12px)", color: "#666", fontFamily: font }}>
                   keyboard: left/right move | up/space jump | down duck
                 </div>
-                {screen === "over" && !nickname && (
-                  <form
-                    onSubmit={rememberNickname}
-                    style={{
-                      display: "flex",
-                      gap: 8,
-                      marginTop: 12,
-                      padding: 10,
-                      background: "#fff",
-                      border: `3px solid ${INK}`,
-                      borderRadius: 12
-                    }}
-                  >
-                    <input
-                      value={nicknameDraft}
-                      onChange={(event) => setNicknameDraft(event.target.value)}
-                      maxLength="20"
-                      aria-label="Your nickname"
-                      placeholder="Your nickname"
-                      autoFocus
-                      style={{
-                        minWidth: 0,
-                        flex: 1,
-                        border: `2px solid ${PURPLE}`,
-                        borderRadius: 8,
-                        padding: "8px 10px",
-                        fontFamily: font,
-                        fontWeight: 700
-                      }}
-                    />
-                    <button
-                      type="submit"
-                      style={{
-                        border: `3px solid ${INK}`,
-                        borderRadius: 8,
-                        background: MELON_GREEN,
-                        color: "#fff",
-                        padding: "8px 12px",
-                        fontFamily: font,
-                        fontWeight: 700,
-                        cursor: "pointer"
-                      }}
-                    >
-                      Save
-                    </button>
-                  </form>
+                {screen === "over" && !scorePlayer && (
+                  <div style={{ marginTop: 10, textAlign: "center", fontSize: 13, color: PURPLE }}>
+                    Use Player Login to save this score.
+                  </div>
                 )}
                 {screen === "over" && savedScore && (
                   <div style={{ marginTop: 10, textAlign: "center", fontSize: 13, color: MELON_GREEN }}>
-                    {db ? "Best score saved!" : "Nickname remembered on this device."}
+                    Best score saved!
                   </div>
                 )}
-                {(screen === "title" || screen === "over") && leaderboard.length > 0 && (
+                {(screen === "title" || screen === "over") && (
                   <div
                     style={{
                       marginTop: 12,
@@ -2536,15 +2798,21 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
                     <div style={{ textAlign: "center", fontWeight: 700, color: PURPLE }}>
                       Top Jumping Watermelons
                     </div>
-                    <ol style={{ margin: "8px 0 0", paddingLeft: 28, fontSize: "clamp(12px, 3.5vw, 13px)" }}>
-                      {leaderboard.map((entry) => (
-                        <li key={entry.id}>
-                          <span style={{ fontWeight: 700 }}>{entry.name || "Player"}</span>
-                          {" — "}
-                          {entry.bestScore}
-                        </li>
-                      ))}
-                    </ol>
+                    {leaderboard.length === 0 ? (
+                      <div style={{ marginTop: 8, textAlign: "center", fontSize: 13, color: "#777" }}>
+                        No scores yet. Be the first!
+                      </div>
+                    ) : (
+                      <ol style={{ margin: "8px 0 0", paddingLeft: 28, fontSize: "clamp(12px, 3.5vw, 13px)" }}>
+                        {leaderboard.map((entry) => (
+                          <li key={entry.id}>
+                            <span style={{ fontWeight: 700 }}>{entry.name || "Player"}</span>
+                            {" — "}
+                            {entry.bestScore}
+                          </li>
+                        ))}
+                      </ol>
+                    )}
                   </div>
                 )}
               </div>
