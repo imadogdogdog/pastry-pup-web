@@ -17,21 +17,23 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
       import {
         getAuth,
         onAuthStateChanged,
-        signInAnonymously
+        signInAnonymously,
+        signInWithEmailAndPassword,
+        signOut
       } from "firebase/auth";
 
       const firebaseConfig = {
-        // Paste your Firebase web app config here if you want the staff menu editor
-        // to save items online. The site still works without it.
-        // apiKey: "",
-        // authDomain: "",
-        // projectId: "",
-        // storageBucket: "",
-        // messagingSenderId: "",
-        // appId: ""
+        apiKey: "AIzaSyAT7VtRzyaj00tTDSja0qJ3Et3LwSAh8eo",
+        authDomain: "pastry-pup.firebaseapp.com",
+        projectId: "pastry-pup",
+        storageBucket: "pastry-pup.firebasestorage.app",
+        messagingSenderId: "630932830544",
+        appId: "1:630932830544:web:5e06a2953f39a4fac2d455"
       };
 
       const appId = "pastry-pup-final";
+      const staffEmail = "lucy.the.headchef@gmail.com";
+      const staffUid = "6flMuzAdeBZBpyBMKz0XP8DAvGt1";
       const fallbackLogo =
         "https://placehold.co/300x300/f9a8d4/ffffff?text=Pastry+Pup";
       const ROUTES = {
@@ -63,14 +65,41 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
         }
       ];
 
+      const saveBestArcadeScore = async (db, user, gameId, score, details = {}) => {
+        if (!db || !user || !Number.isFinite(score) || score < 0) return false;
+        const scoreRef = doc(
+          db,
+          "artifacts",
+          appId,
+          "public",
+          "data",
+          "arcadeScores",
+          gameId,
+          "players",
+          user.uid
+        );
+        const existing = await getDoc(scoreRef);
+        if (existing.exists() && score <= (existing.data().bestScore || 0)) {
+          return true;
+        }
+        await setDoc(scoreRef, {
+          bestScore: Math.floor(score),
+          updatedAt: Date.now(),
+          ...details
+        });
+        return true;
+      };
+
       const App = () => {
         const [db, setDb] = useState(null);
+        const [auth, setAuth] = useState(null);
         const [user, setUser] = useState(null);
         const [menuItems, setMenuItems] = useState([]);
         const [isStaffModalOpen, setIsStaffModalOpen] = useState(false);
-        const [isLoggedIn, setIsLoggedIn] = useState(false);
         const [password, setPassword] = useState("");
         const [isPasswordVisible, setIsPasswordVisible] = useState(false);
+        const [loginError, setLoginError] = useState("");
+        const [isLoggingIn, setIsLoggingIn] = useState(false);
         const [newItem, setNewItem] = useState({
           name: "",
           description: "",
@@ -84,11 +113,29 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
           if (!firebaseConfig.apiKey) return;
           const app = initializeApp(firebaseConfig);
           const database = getFirestore(app);
-          const auth = getAuth(app);
+          const authInstance = getAuth(app);
           setDb(database);
-          signInAnonymously(auth).catch(console.error);
-          return onAuthStateChanged(auth, (u) => setUser(u));
+          setAuth(authInstance);
+          return onAuthStateChanged(authInstance, async (currentUser) => {
+            if (currentUser) {
+              setUser(currentUser);
+              return;
+            }
+            setUser(null);
+            try {
+              await signInAnonymously(authInstance);
+            } catch (error) {
+              console.error("Firebase anonymous sign-in:", error);
+            }
+          });
         }, []);
+
+        const isStaff = Boolean(
+          user &&
+            !user.isAnonymous &&
+            user.uid === staffUid &&
+            user.email?.toLowerCase() === staffEmail
+        );
 
         useEffect(() => {
           if (!db || !user) return;
@@ -110,14 +157,31 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
           return unsubscribe;
         }, [db, user]);
 
-        const handleLogin = () => {
-          if (password === "Pickles!") setIsLoggedIn(true);
-          else alert("Wrong password!");
+        const handleLogin = async () => {
+          if (!auth || !password || isLoggingIn) return;
+          setIsLoggingIn(true);
+          setLoginError("");
+          try {
+            await signInWithEmailAndPassword(auth, staffEmail, password);
+            setPassword("");
+          } catch (error) {
+            console.error("Firebase staff sign-in:", error);
+            setLoginError("That password did not work.");
+          } finally {
+            setIsLoggingIn(false);
+          }
+        };
+
+        const handleLogout = async () => {
+          if (!auth) return;
+          await signOut(auth);
+          setPassword("");
+          setLoginError("");
         };
 
         const addItem = async () => {
-          if (!db) {
-            alert("Firebase is not configured yet, so online menu editing is disabled.");
+          if (!db || !isStaff) {
+            alert("Please sign in as staff before editing the menu.");
             return;
           }
           if (!newItem.name || !newItem.price) {
@@ -137,7 +201,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
         };
 
         const removeItem = async (id) => {
-          if (!db || !window.confirm("Delete this recipe?")) return;
+          if (!db || !isStaff || !window.confirm("Delete this recipe?")) return;
           await deleteDoc(
             doc(db, "artifacts", appId, "public", "data", "menuItems", id)
           );
@@ -148,9 +212,9 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
             case "arcade":
               return <ArcadeMenu />;
             case "catching-treats":
-              return <CatchingTreatsGame />;
+              return <CatchingTreatsGame db={db} user={user} />;
             case "treat-tap-revolution":
-              return <TreatTapRevolution />;
+              return <TreatTapRevolution db={db} user={user} />;
             case "wings-of-fire-quiz":
               return <PersonalityQuiz type="wof" />;
             case "disney-personality":
@@ -409,7 +473,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
                   >
                     &times;
                   </button>
-                  {!isLoggedIn ? (
+                  {!isStaff ? (
                     <div className="py-4 text-center">
                       <h3 className="mb-6 text-3xl font-black">Staff Portal</h3>
                       <div className="relative mb-4">
@@ -433,21 +497,31 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
                       </div>
                       <button
                         onClick={handleLogin}
-                        className="w-full rounded-3xl bg-pink-500 py-5 font-black text-white shadow-lg hover:bg-pink-600"
+                        disabled={!auth || !password || isLoggingIn}
+                        className="w-full rounded-3xl bg-pink-500 py-5 font-black text-white shadow-lg hover:bg-pink-600 disabled:cursor-not-allowed disabled:opacity-50"
                       >
-                        Unlock Bakery
+                        {isLoggingIn ? "Checking..." : "Unlock Bakery"}
                       </button>
+                      {loginError && (
+                        <p className="mt-4 rounded-2xl bg-red-50 p-3 text-sm font-bold text-red-600">
+                          {loginError}
+                        </p>
+                      )}
                     </div>
                   ) : (
                     <div className="space-y-6">
-                      <h3 className="text-3xl font-black text-slate-800">
-                        Kitchen Manager
-                      </h3>
-                      {!db && (
-                        <p className="rounded-2xl bg-amber-50 p-4 text-sm font-bold text-amber-800">
-                          Firebase is not configured, so added treats will not save yet.
-                        </p>
-                      )}
+                      <div className="flex items-center justify-between gap-4">
+                        <h3 className="text-3xl font-black text-slate-800">
+                          Kitchen Manager
+                        </h3>
+                        <button
+                          type="button"
+                          onClick={handleLogout}
+                          className="rounded-xl bg-slate-100 px-4 py-2 text-xs font-black text-slate-600 hover:bg-slate-200"
+                        >
+                          Sign Out
+                        </button>
+                      </div>
                       <div className="space-y-4 rounded-[2rem] bg-slate-50 p-6">
                         <input
                           value={newItem.name}
@@ -821,19 +895,32 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
         );
       };
 
-      const CatchingTreatsGame = () => {
+      const CatchingTreatsGame = ({ db, user }) => {
         const canvasRef = useRef(null);
         const [score, setScore] = useState(0);
         const [level, setLevel] = useState(1);
         const [lives, setLives] = useState(0);
         const [gameStatus, setGameStatus] = useState("start");
+        const [scoreSaved, setScoreSaved] = useState(false);
 
         const startGame = (startingLives) => {
           setLives(startingLives);
           setScore(0);
           setLevel(1);
+          setScoreSaved(false);
           setGameStatus("playing");
         };
+
+        useEffect(() => {
+          if (gameStatus !== "over" || score <= 0) return;
+          let cancelled = false;
+          saveBestArcadeScore(db, user, "catching-treats", score, { level })
+            .then((saved) => !cancelled && setScoreSaved(saved))
+            .catch((error) => console.error("Catching Treats score save:", error));
+          return () => {
+            cancelled = true;
+          };
+        }, [db, gameStatus, level, score, user]);
 
         useEffect(() => {
           if (gameStatus !== "playing") return undefined;
@@ -1021,6 +1108,9 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
                 <div className="space-y-6">
                   <h2 className="text-6xl font-black text-red-500">Game Over!</h2>
                   <p className="text-3xl font-black text-slate-800">Score: {score}</p>
+                  {scoreSaved && (
+                    <p className="font-bold text-green-600">Best score saved online!</p>
+                  )}
                   <button
                     onClick={() => setGameStatus("start")}
                     className="rounded-3xl bg-pink-500 px-10 py-5 text-2xl font-black text-white shadow-xl hover:bg-pink-600"
@@ -1040,7 +1130,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
         );
       };
 
-      const TreatTapRevolution = () => {
+      const TreatTapRevolution = ({ db, user }) => {
         const canvasRef = useRef(null);
         const audioRef = useRef(null);
         const [gameStatus, setGameStatus] = useState("start");
@@ -1049,6 +1139,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
         const [combo, setCombo] = useState(0);
         const [bestCombo, setBestCombo] = useState(0);
         const [lives, setLives] = useState(5);
+        const [scoreSaved, setScoreSaved] = useState(false);
 
         const modes = {
           easy: { label: "Easy", hands: "1 hand", lanes: 2, bpm: 100, lives: 6, chords: false },
@@ -1077,8 +1168,23 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
           setCombo(0);
           setBestCombo(0);
           setLives(modes[mode].lives);
+          setScoreSaved(false);
           setGameStatus("playing");
         };
+
+        useEffect(() => {
+          if (gameStatus !== "over" || score <= 0) return;
+          let cancelled = false;
+          saveBestArcadeScore(db, user, "treat-tap-revolution", score, {
+            difficulty,
+            bestCombo
+          })
+            .then((saved) => !cancelled && setScoreSaved(saved))
+            .catch((error) => console.error("Treat Tap score save:", error));
+          return () => {
+            cancelled = true;
+          };
+        }, [bestCombo, db, difficulty, gameStatus, score, user]);
 
         useEffect(() => {
           if (gameStatus !== "playing") return undefined;
@@ -1290,6 +1396,9 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
                   <h2 className="text-4xl font-black text-pink-300">Song Complete!</h2>
                   <p className="text-2xl font-black">Score: {score}</p>
                   <p className="font-bold text-purple-200">Best combo: {bestCombo}</p>
+                  {scoreSaved && (
+                    <p className="font-bold text-green-300">Best score saved online!</p>
+                  )}
                   <button onClick={() => setGameStatus("start")} className="rounded-2xl bg-fuchsia-500 px-8 py-4 text-xl font-black shadow-lg hover:bg-fuchsia-400">Play Again</button>
                 </div>
               )}
