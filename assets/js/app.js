@@ -2522,7 +2522,10 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 
           // ============ CONTROLLER (styled like the drawing) ============
           const Pad = ({ who, accent }) => {
-            const btn = (label, action, style, hold) => {
+            const keys = who === 1
+              ? { up: "W", left: "A", down: "S", right: "D", bite: "F", strike: "G" }
+              : { up: "\u2191", left: "\u2190", down: "\u2193", right: "\u2192", bite: "K", strike: "L" };
+            const btn = (label, keyLabel, action, style, hold) => {
               const handlers = hold
                 ? {
                     onTouchStart: (e) => { e.preventDefault(); doAction(who, "blockOn"); },
@@ -2536,14 +2539,24 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
                     onMouseDown: () => doAction(who, action),
                   };
               return (
-                <button {...handlers} style={{
+                <button {...handlers} aria-label={`Player ${who}: ${keyLabel} - ${label}`} style={{
                   fontFamily: font, fontWeight: 700, border: `3px solid ${INK}`,
                   background: PAPER, color: INK, borderRadius: 10,
                   touchAction: "none", userSelect: "none", WebkitUserSelect: "none",
                   fontSize: 13, lineHeight: 1.1, padding: 0,
                   boxShadow: `2px 2px 0 ${INK}`,
                   cursor: "pointer", ...style,
-                }}>{label}</button>
+                }}>
+                  <span style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 2 }}>
+                    <kbd style={{
+                      minWidth: 20, padding: "1px 4px", background: "#fff", color: INK,
+                      border: `1.5px solid ${INK}`, borderRadius: 4, boxShadow: `0 1px 0 ${INK}`,
+                      fontFamily: "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
+                      fontSize: 11, lineHeight: 1.1,
+                    }}>{keyLabel}</kbd>
+                    <span>{label}</span>
+                  </span>
+                </button>
               );
             };
             const cell = 44;
@@ -2556,16 +2569,16 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
               }}>
                 {/* D-pad */}
                 <div style={{ display: "grid", gridTemplateColumns: `repeat(3, ${cell}px)`, gridTemplateRows: `repeat(3, ${cell}px)`, gap: 3 }}>
-                  <div />{btn("\u25B2 dodge", "jump", { gridColumn: 2, background: "#cdeeee" })}<div />
-                  {btn("\u25C0 block", null, { background: "#cdeeee" }, true)}
+                  <div />{btn("dodge", keys.up, "jump", { gridColumn: 2, background: "#cdeeee" })}<div />
+                  {btn("block", keys.left, null, { background: "#cdeeee" }, true)}
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "center", fontFamily: font, fontSize: 10, color: DARKTEAL }}>P{who}</div>
-                  {btn("block \u25B6", null, { background: "#cdeeee" }, true)}
-                  <div />{btn("\u25BC crouch", "crouch", { gridColumn: 2, background: "#cdeeee" })}<div />
+                  {btn("block", keys.right, null, { background: "#cdeeee" }, true)}
+                  <div />{btn("crouch", keys.down, "crouch", { gridColumn: 2, background: "#cdeeee" })}<div />
                 </div>
                 {/* Action buttons */}
                 <div style={{ display: "flex", flexDirection: "column", gap: 8, alignItems: "center" }}>
-                  {btn("BITE", "bite", { width: 66, height: 66, borderRadius: "50%", background: accent, color: "#fff", fontSize: 15, textShadow: `1px 1px 0 ${INK}` })}
-                  {btn("strike", "strike", { width: 50, height: 34, borderRadius: 17, background: ORANGE })}
+                  {btn("BITE", keys.bite, "bite", { width: 66, height: 66, borderRadius: "50%", background: accent, color: "#fff", fontSize: 15, textShadow: `1px 1px 0 ${INK}` })}
+                  {btn("strike", keys.strike, "strike", { width: 50, height: 42, borderRadius: 21, background: ORANGE })}
                 </div>
               </div>
             );
