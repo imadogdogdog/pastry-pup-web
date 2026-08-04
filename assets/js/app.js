@@ -47,13 +47,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
         disneyPersonality: "/arcade/disney-personality/"
       };
 
-      const latestBakes = [
-        {
-          src: "/assets/images/latest-bakes/chocolate-chip-cookies.webp",
-          alt: "A fresh batch of chocolate chip cookies on parchment paper",
-          caption: "Chocolate Chip Cookies"
-        }
-      ];
+      const latestBakes = [];
 
       const emptyMenuItem = {
         name: "",
