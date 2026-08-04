@@ -85,6 +85,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
         name: "",
         description: "",
         price: "",
+        priceOptions: [""],
         img: "",
         isSignature: false
       };
@@ -344,8 +345,15 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
             alert("Please sign in as staff before editing the menu.");
             return;
           }
-          if (!newItem.name || !newItem.price) {
-            alert("Fill in the name and price!");
+          const priceOptions = (newItem.priceOptions || [])
+            .map((option) => option.trim())
+            .filter(Boolean);
+          if (!newItem.name || priceOptions.length === 0) {
+            alert("Fill in the name and at least one price!");
+            return;
+          }
+          if (priceOptions.some((option) => option.length > 50)) {
+            alert("Keep each price option under 50 characters.");
             return;
           }
           setMenuEditorMessage("");
@@ -360,7 +368,8 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
           const itemData = {
             name: newItem.name.trim(),
             description: newItem.description.trim(),
-            price: newItem.price.trim(),
+            price: priceOptions[0],
+            priceOptions,
             img: newItem.img.trim(),
             isSignature: Boolean(newItem.isSignature)
           };
@@ -383,10 +392,43 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
             name: item.name || "",
             description: item.description || item.desc || "",
             price: item.price || "",
+            priceOptions:
+              Array.isArray(item.priceOptions) && item.priceOptions.length > 0
+                ? item.priceOptions
+                : [item.price || ""],
             img: item.img || "",
             isSignature: Boolean(item.isSignature)
           });
           setMenuEditorMessage("");
+        };
+
+        const updatePriceOption = (index, value) => {
+          setNewItem((item) => ({
+            ...item,
+            priceOptions: item.priceOptions.map((option, optionIndex) =>
+              optionIndex === index ? value : option
+            )
+          }));
+        };
+
+        const addPriceOption = () => {
+          setNewItem((item) => ({
+            ...item,
+            priceOptions:
+              item.priceOptions.length >= 12
+                ? item.priceOptions
+                : [...item.priceOptions, ""]
+          }));
+        };
+
+        const removePriceOption = (index) => {
+          setNewItem((item) => ({
+            ...item,
+            priceOptions:
+              item.priceOptions.length === 1
+                ? [""]
+                : item.priceOptions.filter((_, optionIndex) => optionIndex !== index)
+          }));
         };
 
         const handleMenuImageFile = async (event) => {
@@ -766,14 +808,47 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
                           placeholder="Description"
                           className="h-24 w-full rounded-2xl p-4 outline-none"
                         />
-                        <input
-                          value={newItem.price}
-                          onChange={(e) =>
-                            setNewItem({ ...newItem, price: e.target.value })
-                          }
-                          placeholder="Price"
-                          className="w-full rounded-2xl p-4 font-bold outline-none"
-                        />
+                        <div className="space-y-3 rounded-2xl bg-white p-4">
+                          <div className="flex items-center justify-between gap-3">
+                            <div>
+                              <h5 className="font-black text-slate-700">Pricing</h5>
+                              <p className="text-xs font-semibold text-slate-400">
+                                Add a single price and any quantity deals.
+                              </p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={addPriceOption}
+                              disabled={newItem.priceOptions.length >= 12}
+                              className="rounded-xl bg-pink-100 px-3 py-2 text-xs font-black text-pink-600 disabled:opacity-40"
+                            >
+                              + Add Price
+                            </button>
+                          </div>
+                          {newItem.priceOptions.map((option, index) => (
+                            <div key={index} className="flex items-center gap-2">
+                              <input
+                                value={option}
+                                maxLength={50}
+                                onChange={(event) =>
+                                  updatePriceOption(index, event.target.value)
+                                }
+                                placeholder={
+                                  index === 0 ? "Single — $2.50" : "3 for $5"
+                                }
+                                className="min-w-0 flex-1 rounded-xl bg-slate-50 p-3 font-bold outline-none"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => removePriceOption(index)}
+                                className="rounded-xl bg-red-50 px-3 py-3 text-xs font-black text-red-500"
+                                aria-label={`Remove price option ${index + 1}`}
+                              >
+                                Remove
+                              </button>
+                            </div>
+                          ))}
+                        </div>
                         <input
                           value={newItem.img}
                           onChange={(e) =>
@@ -969,7 +1044,21 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
         );
       };
 
-      const MenuItem = ({ name, desc, description, price, img, isSignature }) => (
+      const MenuItem = ({
+        name,
+        desc,
+        description,
+        price,
+        priceOptions,
+        img,
+        isSignature
+      }) => {
+        const displayedPrices =
+          Array.isArray(priceOptions) && priceOptions.length > 0
+            ? priceOptions
+            : [price].filter(Boolean);
+
+        return (
         <div className="group rounded-[4rem] bg-white p-8 shadow-2xl transition-all duration-500 hover:scale-[1.03]">
           <div className="relative mb-8 aspect-[4/3] overflow-hidden rounded-[3rem]">
             <img
@@ -989,14 +1078,28 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
           <p className="mb-10 line-clamp-3 text-lg font-medium leading-relaxed text-slate-500">
             {desc || description}
           </p>
-          <div className="flex items-center justify-between rounded-[2.5rem] bg-slate-50 p-4">
-            <span className="pl-4 text-3xl font-black text-pink-500">{price}</span>
-            <button className="rounded-2xl bg-slate-900 px-8 py-3 font-black text-white transition-all hover:bg-pink-500">
+          <div className="rounded-[2.5rem] bg-slate-50 p-4">
+            <div className="space-y-1 px-4 py-2">
+              {displayedPrices.map((option, index) => (
+                <div
+                  key={`${option}-${index}`}
+                  className={
+                    index === 0
+                      ? "text-2xl font-black text-pink-500"
+                      : "text-lg font-black text-slate-600"
+                  }
+                >
+                  {option}
+                </div>
+              ))}
+            </div>
+            <button className="mt-3 w-full rounded-2xl bg-slate-900 px-8 py-3 font-black text-white transition-all hover:bg-pink-500">
               Order
             </button>
           </div>
         </div>
-      );
+        );
+      };
 
       const ArcadeLeaderboards = ({ db }) => {
         const [boards, setBoards] = useState({
