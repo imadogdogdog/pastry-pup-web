@@ -2304,6 +2304,13 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
             const col = o.kind === "ketchup" ? "#d9453a" : "#e8b31e";
             const label = o.kind === "ketchup" ? "K" : "M";
             return (<g transform={base}>
+              {/* Condiments can only be avoided by crouching, so show the action
+                  cue on the hazard itself instead of relying on the title screen. */}
+              <g transform={`translate(${o.w / 2}, ${-o.h - 38})`}>
+                <rect x="-25" y="-13" width="50" height="23" rx="8" fill={SUN} stroke={INK} strokeWidth="2" />
+                <text x="0" y="3" textAnchor="middle" fontFamily={font} fontWeight="700" fontSize="12" fill={INK}>DUCK!</text>
+                <path d="M -7 15 L 0 23 L 7 15" fill="none" stroke={INK} strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" />
+              </g>
               <rect x="0" y={-o.h} width={o.w} height={o.h} rx="8" fill={col} stroke={INK} strokeWidth="2.5" />
               <rect x={o.w - 6} y={-o.h + 8} width="8" height="8" rx="2" fill={col} stroke={INK} strokeWidth="2" />
               <text x={o.w / 2 - 4} y={-o.h / 2 + 5} fontFamily={font} fontWeight="700" fontSize="14" fill="#fff">{label}</text>
