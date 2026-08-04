@@ -65,6 +65,59 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
         }
       ];
 
+      const emptyMenuItem = {
+        name: "",
+        description: "",
+        price: "",
+        img: "",
+        isSignature: false
+      };
+
+      const prepareMenuImage = (file) =>
+        new Promise((resolve, reject) => {
+          if (!file?.type?.startsWith("image/")) {
+            reject(new Error("Choose an image file."));
+            return;
+          }
+          if (file.size > 12 * 1024 * 1024) {
+            reject(new Error("Choose an image smaller than 12 MB."));
+            return;
+          }
+
+          const reader = new FileReader();
+          reader.onerror = () => reject(new Error("The image could not be read."));
+          reader.onload = () => {
+            const image = new Image();
+            image.onerror = () => reject(new Error("The image could not be opened."));
+            image.onload = () => {
+              const maxWidth = 900;
+              const maxHeight = 675;
+              const scale = Math.min(
+                1,
+                maxWidth / image.naturalWidth,
+                maxHeight / image.naturalHeight
+              );
+              const width = Math.max(1, Math.round(image.naturalWidth * scale));
+              const height = Math.max(1, Math.round(image.naturalHeight * scale));
+              const canvas = document.createElement("canvas");
+              canvas.width = width;
+              canvas.height = height;
+              const context = canvas.getContext("2d");
+              context.fillStyle = "#ffffff";
+              context.fillRect(0, 0, width, height);
+              context.drawImage(image, 0, 0, width, height);
+              const dataUrl = canvas.toDataURL("image/jpeg", 0.78);
+              if (dataUrl.length > 900000) {
+                reject(new Error("That image is still too large after resizing."));
+                return;
+              }
+              resolve(dataUrl);
+            };
+            image.src = reader.result;
+          };
+          reader.readAsDataURL(file);
+        });
+
       const saveBestArcadeScore = async (db, user, gameId, score, details = {}) => {
         if (!db || !user || !Number.isFinite(score) || score < 0) return false;
         const scoreRef = doc(
@@ -100,12 +153,10 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
         const [isPasswordVisible, setIsPasswordVisible] = useState(false);
         const [loginError, setLoginError] = useState("");
         const [isLoggingIn, setIsLoggingIn] = useState(false);
-        const [newItem, setNewItem] = useState({
-          name: "",
-          description: "",
-          price: "",
-          img: ""
-        });
+        const [newItem, setNewItem] = useState({ ...emptyMenuItem });
+        const [editingItemId, setEditingItemId] = useState(null);
+        const [isPreparingImage, setIsPreparingImage] = useState(false);
+        const [menuEditorMessage, setMenuEditorMessage] = useState("");
         const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
         const page = document.body.dataset.page || "home";
 
@@ -152,6 +203,10 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
               id: doc.id,
               ...doc.data()
             }));
+            items.sort(
+              (first, second) =>
+                (first.timestamp || 0) - (second.timestamp || 0)
+            );
             setMenuItems(items);
           });
           return unsubscribe;
@@ -179,7 +234,13 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
           setLoginError("");
         };
 
-        const addItem = async () => {
+        const resetMenuEditor = () => {
+          setNewItem({ ...emptyMenuItem });
+          setEditingItemId(null);
+          setMenuEditorMessage("");
+        };
+
+        const saveMenuItem = async () => {
           if (!db || !isStaff) {
             alert("Please sign in as staff before editing the menu.");
             return;
@@ -188,6 +249,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
             alert("Fill in the name and price!");
             return;
           }
+          setMenuEditorMessage("");
           const menuRef = collection(
             db,
             "artifacts",
@@ -196,8 +258,53 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
             "data",
             "menuItems"
           );
-          await addDoc(menuRef, { ...newItem, timestamp: Date.now() });
-          setNewItem({ name: "", description: "", price: "", img: "" });
+          const itemData = {
+            name: newItem.name.trim(),
+            description: newItem.description.trim(),
+            price: newItem.price.trim(),
+            img: newItem.img.trim(),
+            isSignature: Boolean(newItem.isSignature)
+          };
+          try {
+            if (editingItemId) {
+              await setDoc(doc(menuRef, editingItemId), itemData, { merge: true });
+            } else {
+              await addDoc(menuRef, { ...itemData, timestamp: Date.now() });
+            }
+            resetMenuEditor();
+          } catch (error) {
+            console.error("Firebase menu save:", error);
+            setMenuEditorMessage("The treat could not be saved. Please try again.");
+          }
+        };
+
+        const startEditingItem = (item) => {
+          setEditingItemId(item.id);
+          setNewItem({
+            name: item.name || "",
+            description: item.description || item.desc || "",
+            price: item.price || "",
+            img: item.img || "",
+            isSignature: Boolean(item.isSignature)
+          });
+          setMenuEditorMessage("");
+        };
+
+        const handleMenuImageFile = async (event) => {
+          const file = event.target.files?.[0];
+          event.target.value = "";
+          if (!file) return;
+          setIsPreparingImage(true);
+          setMenuEditorMessage("Preparing photo...");
+          try {
+            const img = await prepareMenuImage(file);
+            setNewItem((item) => ({ ...item, img }));
+            setMenuEditorMessage("Photo ready. Save the treat to publish it.");
+          } catch (error) {
+            setMenuEditorMessage(error.message || "The photo could not be prepared.");
+          } finally {
+            setIsPreparingImage(false);
+          }
         };
 
         const removeItem = async (id) => {
@@ -205,6 +312,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
           await deleteDoc(
             doc(db, "artifacts", appId, "public", "data", "menuItems", id)
           );
+          if (editingItemId === id) resetMenuEditor();
         };
 
         const renderView = () => {
@@ -413,16 +521,19 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
                 Baked Fresh Today
               </h2>
               <div className="grid grid-cols-1 gap-12 md:grid-cols-2 lg:grid-cols-3">
-                <MenuItem
-                  name="Pawnut Butter Cookie"
-                  desc="Rich peanut butter with honey and a hand-pressed paw print design."
-                  price="$2.50"
-                  img="/assets/images/latest-bakes/peanut-butter-cookies.webp"
-                  isSignature
-                />
                 {menuItems.map((item) => (
                   <MenuItem key={item.id} {...item} />
                 ))}
+                {menuItems.length === 0 && (
+                  <div className="col-span-full rounded-[3rem] bg-white p-12 text-center shadow-xl">
+                    <h3 className="text-3xl font-black text-slate-700">
+                      Fresh treats are coming soon!
+                    </h3>
+                    <p className="mt-3 text-lg font-medium text-slate-500">
+                      Check back for the next Pastry Pup menu update.
+                    </p>
+                  </div>
+                )}
               </div>
             </section>
 
@@ -523,6 +634,20 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
                         </button>
                       </div>
                       <div className="space-y-4 rounded-[2rem] bg-slate-50 p-6">
+                        <div className="flex items-center justify-between gap-3">
+                          <h4 className="font-black text-slate-700">
+                            {editingItemId ? "Edit Treat" : "Add a Treat"}
+                          </h4>
+                          {editingItemId && (
+                            <button
+                              type="button"
+                              onClick={resetMenuEditor}
+                              className="text-xs font-black text-slate-400 hover:text-slate-700"
+                            >
+                              Cancel Edit
+                            </button>
+                          )}
+                        </div>
                         <input
                           value={newItem.name}
                           onChange={(e) =>
@@ -558,12 +683,60 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
                           placeholder="Image URL"
                           className="w-full rounded-2xl p-4 outline-none"
                         />
+                        <label className="block cursor-pointer rounded-2xl border-2 border-dashed border-pink-200 bg-white p-4 text-center font-black text-pink-600 hover:bg-pink-50">
+                          {isPreparingImage ? "Preparing Photo..." : "Upload Photo"}
+                          <input
+                            type="file"
+                            accept="image/*"
+                            disabled={isPreparingImage}
+                            onChange={handleMenuImageFile}
+                            className="sr-only"
+                          />
+                        </label>
+                        {newItem.img && (
+                          <div className="overflow-hidden rounded-2xl bg-white">
+                            <img
+                              src={newItem.img}
+                              alt="Treat preview"
+                              className="aspect-[4/3] w-full object-cover"
+                            />
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setNewItem((item) => ({ ...item, img: "" }))
+                              }
+                              className="w-full py-3 text-sm font-black text-red-500 hover:bg-red-50"
+                            >
+                              Remove Photo
+                            </button>
+                          </div>
+                        )}
+                        <label className="flex items-center gap-3 rounded-2xl bg-white p-4 font-bold text-slate-600">
+                          <input
+                            type="checkbox"
+                            checked={newItem.isSignature}
+                            onChange={(event) =>
+                              setNewItem({
+                                ...newItem,
+                                isSignature: event.target.checked
+                              })
+                            }
+                            className="h-5 w-5 accent-pink-500"
+                          />
+                          Show Signature badge
+                        </label>
                         <button
-                          onClick={addItem}
-                          className="w-full rounded-2xl bg-green-500 py-4 font-black text-white transition hover:bg-green-600"
+                          onClick={saveMenuItem}
+                          disabled={isPreparingImage}
+                          className="w-full rounded-2xl bg-green-500 py-4 font-black text-white transition hover:bg-green-600 disabled:cursor-not-allowed disabled:opacity-50"
                         >
-                          Add Treat
+                          {editingItemId ? "Save Changes" : "Add Treat"}
                         </button>
+                        {menuEditorMessage && (
+                          <p className="text-center text-sm font-bold text-slate-500">
+                            {menuEditorMessage}
+                          </p>
+                        )}
                       </div>
                       <div className="space-y-2">
                         <h4 className="text-xs font-black uppercase text-slate-400">
@@ -572,17 +745,35 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
                         {menuItems.map((item) => (
                           <div
                             key={item.id}
-                            className="flex items-center justify-between rounded-2xl border-2 border-slate-50 bg-white p-4"
+                            className="flex items-center gap-3 rounded-2xl border-2 border-slate-50 bg-white p-3"
                           >
-                            <span className="mr-2 truncate font-bold">
+                            <img
+                              src={
+                                item.img ||
+                                "https://placehold.co/80x80/fbcfe8/831843?text=Treat"
+                              }
+                              alt=""
+                              className="h-12 w-12 shrink-0 rounded-xl object-cover"
+                            />
+                            <span className="min-w-0 flex-1 truncate font-bold">
                               {item.name}
                             </span>
-                            <button
-                              onClick={() => removeItem(item.id)}
-                              className="rounded-xl bg-red-500 px-4 py-2 text-xs text-white"
-                            >
-                              Delete
-                            </button>
+                            <div className="flex shrink-0 gap-2">
+                              <button
+                                type="button"
+                                onClick={() => startEditingItem(item)}
+                                className="rounded-xl bg-sky-500 px-3 py-2 text-xs font-black text-white"
+                              >
+                                Edit
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => removeItem(item.id)}
+                                className="rounded-xl bg-red-500 px-3 py-2 text-xs font-black text-white"
+                              >
+                                Delete
+                              </button>
+                            </div>
                           </div>
                         ))}
                       </div>

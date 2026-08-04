@@ -18,9 +18,33 @@ service cloud.firestore {
         && request.resource.data.updatedAt is int;
     }
 
+    function validMenuItem() {
+      return request.resource.data.keys().hasOnly([
+          "name",
+          "description",
+          "price",
+          "img",
+          "isSignature",
+          "timestamp"
+        ])
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.name.size() <= 80
+        && request.resource.data.description is string
+        && request.resource.data.description.size() <= 500
+        && request.resource.data.price is string
+        && request.resource.data.price.size() > 0
+        && request.resource.data.price.size() <= 30
+        && request.resource.data.img is string
+        && request.resource.data.img.size() <= 900000
+        && request.resource.data.isSignature is bool
+        && request.resource.data.timestamp is int;
+    }
+
     match /artifacts/pastry-pup-final/public/data/menuItems/{itemId} {
       allow read: if true;
-      allow create, update, delete: if isStaff();
+      allow create, update: if isStaff() && validMenuItem();
+      allow delete: if isStaff();
     }
 
     match /artifacts/pastry-pup-final/public/data/watermelonScores/{userId} {
