@@ -2304,8 +2304,22 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
             const col = o.kind === "ketchup" ? "#d9453a" : "#e8b31e";
             const label = o.kind === "ketchup" ? "K" : "M";
             return (<g transform={base}>
-              {/* Condiments can only be avoided by crouching, so show the action
-                  cue on the hazard itself instead of relying on the title screen. */}
+              {/* Carry the crouch warning from the top of the playfield to the
+                  condiment so the duck-only collision never looks like empty space. */}
+              <path
+                d={`M ${o.w / 2} ${-o.y + 14} V ${-o.h - 54}`}
+                fill="none"
+                stroke={INK}
+                strokeWidth="6"
+                strokeDasharray="8 6"
+              />
+              <path
+                d={`M ${o.w / 2} ${-o.y + 14} V ${-o.h - 54}`}
+                fill="none"
+                stroke={SUN}
+                strokeWidth="3"
+                strokeDasharray="8 6"
+              />
               <g transform={`translate(${o.w / 2}, ${-o.h - 38})`}>
                 <rect x="-25" y="-13" width="50" height="23" rx="8" fill={SUN} stroke={INK} strokeWidth="2" />
                 <text x="0" y="3" textAnchor="middle" fontFamily={font} fontWeight="700" fontSize="12" fill={INK}>DUCK!</text>
@@ -2520,7 +2534,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
                     }}
                   >
                     <div style={{ textAlign: "center", fontWeight: 700, color: PURPLE }}>
-                      Top Watermelon Jumpers
+                      Top Jumping Watermelons
                     </div>
                     <ol style={{ margin: "8px 0 0", paddingLeft: 28, fontSize: "clamp(12px, 3.5vw, 13px)" }}>
                       {leaderboard.map((entry) => (
