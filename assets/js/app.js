@@ -45,6 +45,24 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
         disneyPersonality: "/arcade/disney-personality/"
       };
 
+      const latestBakes = [
+        {
+          src: "/assets/images/latest-bakes/peanut-butter-cookies.webp",
+          alt: "A plate stacked with freshly baked peanut butter cookies",
+          caption: "Pawnut Butter Cookies"
+        },
+        {
+          src: "/assets/images/latest-bakes/chocolate-chip-cookies.webp",
+          alt: "A fresh batch of chocolate chip cookies on parchment paper",
+          caption: "Chocolate Chip Cookies"
+        },
+        {
+          src: "/assets/images/latest-bakes/paw-print-cookie-prep.webp",
+          alt: "Peanut butter cookies with hand-pressed paw print designs before baking",
+          caption: "Paw Prints in Progress"
+        }
+      ];
+
       const App = () => {
         const [db, setDb] = useState(null);
         const [user, setUser] = useState(null);
@@ -335,12 +353,50 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
                   name="Pawnut Butter Cookie"
                   desc="Rich peanut butter with honey and a hand-pressed paw print design."
                   price="$2.50"
-                  img="https://placehold.co/400x300/fde68a/92400e?text=Pawnut+Butter+Cookie"
+                  img="/assets/images/latest-bakes/peanut-butter-cookies.webp"
                   isSignature
                 />
                 {menuItems.map((item) => (
                   <MenuItem key={item.id} {...item} />
                 ))}
+              </div>
+            </section>
+
+            <section className="bg-white/60 px-6 py-24" aria-labelledby="latest-bakes-heading">
+              <div className="mx-auto max-w-7xl">
+                <p className="mb-3 text-center text-sm font-black uppercase tracking-[0.25em] text-pink-500">
+                  From our kitchen
+                </p>
+                <h2
+                  id="latest-bakes-heading"
+                  className="mb-5 text-center text-5xl font-black text-slate-800"
+                >
+                  Latest Bakes
+                </h2>
+                <p className="mx-auto mb-12 max-w-2xl text-center text-lg font-medium text-slate-500">
+                  A peek at the newest treats coming out of the Pastry Pup kitchen.
+                </p>
+                <div className="grid gap-8 md:grid-cols-3">
+                  {latestBakes.map((photo) => (
+                    <figure
+                      key={photo.src}
+                      className="overflow-hidden rounded-[2.5rem] bg-white shadow-xl"
+                    >
+                      <div className="aspect-[4/3] overflow-hidden">
+                        <img
+                          src={photo.src}
+                          alt={photo.alt}
+                          loading="lazy"
+                          decoding="async"
+                          className="h-full w-full object-cover transition-transform duration-700 hover:scale-105"
+                        />
+                      </div>
+                      <figcaption className="p-6 text-center text-xl font-black text-slate-700">
+                        {photo.caption}
+                      </figcaption>
+                    </figure>
+                  ))}
+                </div>
               </div>
             </section>
 
@@ -482,6 +538,8 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
             <img
               src={img || "https://placehold.co/400x300/fbcfe8/831843?text=Treat"}
               alt={name}
+              loading="lazy"
+              decoding="async"
               className="h-full w-full object-cover transition-transform duration-1000 group-hover:scale-110"
             />
             {isSignature && (
