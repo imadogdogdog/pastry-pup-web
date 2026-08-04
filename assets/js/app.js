@@ -49,19 +49,9 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 
       const latestBakes = [
         {
-          src: "/assets/images/latest-bakes/peanut-butter-cookies.webp",
-          alt: "A plate stacked with freshly baked peanut butter cookies",
-          caption: "Pawnut Butter Cookies"
-        },
-        {
           src: "/assets/images/latest-bakes/chocolate-chip-cookies.webp",
           alt: "A fresh batch of chocolate chip cookies on parchment paper",
           caption: "Chocolate Chip Cookies"
-        },
-        {
-          src: "/assets/images/latest-bakes/paw-print-cookie-prep.webp",
-          alt: "Peanut butter cookies with hand-pressed paw print designs before baking",
-          caption: "Paw Prints in Progress"
         }
       ];
 
