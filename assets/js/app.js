@@ -36,6 +36,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
       const staffUid = "6flMuzAdeBZBpyBMKz0XP8DAvGt1";
       const playerProfilesKey = "pastryPupPlayerProfiles";
       const activePlayerKey = "pastryPupActivePlayer";
+      const cartStorageKey = "pastryPupCart:v1";
       const fallbackLogo =
         "https://placehold.co/300x300/f9a8d4/ffffff?text=Pastry+Pup";
       const ROUTES = {
@@ -76,6 +77,34 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
           return legacyName
             ? [{ id: makePlayerId(), name: legacyName.slice(0, 20) }]
             : [];
+        } catch {
+          return [];
+        }
+      };
+
+      const loadCart = () => {
+        try {
+          const saved = JSON.parse(localStorage.getItem(cartStorageKey) || "[]");
+          if (!Array.isArray(saved)) return [];
+          return saved
+            .filter(
+              (item) =>
+                item &&
+                typeof item.key === "string" &&
+                typeof item.name === "string" &&
+                Number.isInteger(item.quantity) &&
+                item.quantity > 0
+            )
+            .map((item) => ({
+              key: item.key,
+              name: item.name.slice(0, 100),
+              priceLabel:
+                typeof item.priceLabel === "string"
+                  ? item.priceLabel.slice(0, 50)
+                  : "",
+              img: typeof item.img === "string" ? item.img : "",
+              quantity: Math.min(item.quantity, 99)
+            }));
         } catch {
           return [];
         }
@@ -193,6 +222,8 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
         const [isPreparingImage, setIsPreparingImage] = useState(false);
         const [menuEditorMessage, setMenuEditorMessage] = useState("");
         const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+        const [cartItems, setCartItems] = useState(loadCart);
+        const [isCartOpen, setIsCartOpen] = useState(false);
         const [playerProfiles, setPlayerProfiles] = useState(loadPlayerProfiles);
         const [activePlayerId, setActivePlayerId] = useState(() => {
           try {
@@ -208,6 +239,75 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 
         const player =
           playerProfiles.find((profile) => profile.id === activePlayerId) || null;
+        const cartItemCount = cartItems.reduce(
+          (total, item) => total + item.quantity,
+          0
+        );
+
+        useEffect(() => {
+          try {
+            localStorage.setItem(cartStorageKey, JSON.stringify(cartItems));
+          } catch {
+            // The cart remains available for the current page visit.
+          }
+        }, [cartItems]);
+
+        useEffect(() => {
+          if (!isCartOpen) return undefined;
+          const closeOnEscape = (event) => {
+            if (event.key === "Escape") setIsCartOpen(false);
+          };
+          window.addEventListener("keydown", closeOnEscape);
+          return () => window.removeEventListener("keydown", closeOnEscape);
+        }, [isCartOpen]);
+
+        const addToCart = (item) => {
+          const priceOptions =
+            Array.isArray(item.priceOptions) && item.priceOptions.length > 0
+              ? item.priceOptions
+              : [item.price].filter(Boolean);
+          const priceLabel = priceOptions[0] || "Price available on request";
+          const key = `${item.id || item.name}::${priceLabel}`;
+
+          setCartItems((currentItems) => {
+            const existingItem = currentItems.find(
+              (cartItem) => cartItem.key === key
+            );
+            if (existingItem) {
+              return currentItems.map((cartItem) =>
+                cartItem.key === key
+                  ? { ...cartItem, quantity: Math.min(cartItem.quantity + 1, 99) }
+                  : cartItem
+              );
+            }
+            return [
+              ...currentItems,
+              {
+                key,
+                name: item.name,
+                priceLabel,
+                img: item.img || "",
+                quantity: 1
+              }
+            ];
+          });
+        };
+
+        const changeCartQuantity = (key, change) => {
+          setCartItems((currentItems) =>
+            currentItems.flatMap((item) => {
+              if (item.key !== key) return [item];
+              const quantity = Math.min(item.quantity + change, 99);
+              return quantity > 0 ? [{ ...item, quantity }] : [];
+            })
+          );
+        };
+
+        const removeFromCart = (key) => {
+          setCartItems((currentItems) =>
+            currentItems.filter((item) => item.key !== key)
+          );
+        };
 
         useEffect(() => {
           try {
@@ -505,35 +605,55 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
                     Pastry Pup
                   </span>
                 </a>
-                <nav className="hidden items-center gap-8 font-bold text-slate-600 md:flex">
-                  <a href="#hero" className="transition hover:text-pink-500">
-                    Home
-                  </a>
-                  <a href="#story" className="transition hover:text-pink-500">
-                    Our Story
-                  </a>
-                  <a href="#menu" className="transition hover:text-pink-500">
-                    Menu
-                  </a>
-                  <a
-                    href={ROUTES.arcade}
-                    className="rounded-full bg-purple-500 px-5 py-2 text-sm font-black text-white shadow-md transition hover:bg-purple-600"
-                  >
-                    Arcade
-                  </a>
+                <div className="flex items-center gap-3">
+                  <nav className="hidden items-center gap-8 font-bold text-slate-600 md:flex">
+                    <a href="#hero" className="transition hover:text-pink-500">
+                      Home
+                    </a>
+                    <a href="#story" className="transition hover:text-pink-500">
+                      Our Story
+                    </a>
+                    <a href="#menu" className="transition hover:text-pink-500">
+                      Menu
+                    </a>
+                    <a
+                      href={ROUTES.arcade}
+                      className="rounded-full bg-purple-500 px-5 py-2 text-sm font-black text-white shadow-md transition hover:bg-purple-600"
+                    >
+                      Arcade
+                    </a>
+                    <button
+                      onClick={() => setIsStaffModalOpen(true)}
+                      className="rounded-full border border-pink-200 bg-pink-50 px-5 py-2 text-sm font-black text-pink-600 transition hover:bg-pink-100"
+                    >
+                      Staff Only
+                    </button>
+                  </nav>
                   <button
-                    onClick={() => setIsStaffModalOpen(true)}
-                    className="rounded-full border border-pink-200 bg-pink-50 px-5 py-2 text-sm font-black text-pink-600 transition hover:bg-pink-100"
+                    type="button"
+                    onClick={() => setIsCartOpen(true)}
+                    className="relative rounded-full bg-pink-500 px-5 py-3 text-sm font-black text-white shadow-md transition hover:bg-pink-600"
+                    aria-label={`View cart with ${cartItemCount} ${
+                      cartItemCount === 1 ? "item" : "items"
+                    }`}
                   >
-                    Staff Only
+                    Cart
+                    <span
+                      className="absolute -right-2 -top-2 flex h-7 min-w-7 items-center justify-center rounded-full bg-slate-900 px-2 text-xs text-white ring-2 ring-white"
+                      aria-live="polite"
+                    >
+                      {cartItemCount}
+                    </span>
                   </button>
-                </nav>
-                <button
-                  className="text-2xl md:hidden"
-                  onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-                >
-                  Menu
-                </button>
+                  <button
+                    type="button"
+                    className="text-lg font-black md:hidden"
+                    onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+                    aria-expanded={isMobileMenuOpen}
+                  >
+                    Menu
+                  </button>
+                </div>
               </div>
             </header>
 
@@ -663,7 +783,11 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
               </h2>
               <div className="grid grid-cols-1 gap-12 md:grid-cols-2 lg:grid-cols-3">
                 {menuItems.map((item) => (
-                  <MenuItem key={item.id} {...item} />
+                  <MenuItem
+                    key={item.id}
+                    {...item}
+                    onAddToCart={() => addToCart(item)}
+                  />
                 ))}
                 {menuItems.length === 0 && (
                   <div className="col-span-full rounded-[3rem] bg-white p-12 text-center shadow-xl">
@@ -957,6 +1081,137 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
               </div>
             )}
 
+            {isCartOpen && (
+              <div
+                className="fixed inset-0 z-[110] flex justify-end bg-black/50 backdrop-blur-sm"
+                onMouseDown={(event) => {
+                  if (event.target === event.currentTarget) setIsCartOpen(false);
+                }}
+              >
+                <aside
+                  role="dialog"
+                  aria-modal="true"
+                  aria-labelledby="cart-heading"
+                  className="flex h-full w-full max-w-md flex-col bg-[#FEFCE8] shadow-2xl"
+                >
+                  <div className="flex items-center justify-between border-b border-pink-100 bg-white px-6 py-5">
+                    <div>
+                      <h2 id="cart-heading" className="text-3xl font-black text-slate-800">
+                        Your Cart
+                      </h2>
+                      <p className="mt-1 font-bold text-pink-500">
+                        {cartItemCount} {cartItemCount === 1 ? "item" : "items"}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setIsCartOpen(false)}
+                      className="rounded-full bg-slate-100 px-4 py-2 text-2xl font-black text-slate-600 hover:bg-slate-200"
+                      aria-label="Close cart"
+                    >
+                      &times;
+                    </button>
+                  </div>
+
+                  {cartItems.length === 0 ? (
+                    <div className="flex flex-1 flex-col items-center justify-center px-8 text-center">
+                      <div className="mb-5 text-6xl" aria-hidden="true">
+                        🛒
+                      </div>
+                      <h3 className="text-2xl font-black text-slate-700">
+                        Your cart is empty
+                      </h3>
+                      <p className="mt-3 font-medium text-slate-500">
+                        Add a fresh treat from the menu to start your order.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => setIsCartOpen(false)}
+                        className="mt-7 rounded-full bg-pink-500 px-7 py-3 font-black text-white hover:bg-pink-600"
+                      >
+                        Browse Treats
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="flex-1 space-y-4 overflow-y-auto p-5">
+                        {cartItems.map((item) => (
+                          <div
+                            key={item.key}
+                            className="rounded-[2rem] bg-white p-4 shadow-md"
+                          >
+                            <div className="flex gap-4">
+                              <img
+                                src={
+                                  item.img ||
+                                  "https://placehold.co/120x120/fbcfe8/831843?text=Treat"
+                                }
+                                alt=""
+                                className="h-20 w-20 shrink-0 rounded-2xl object-cover"
+                              />
+                              <div className="min-w-0 flex-1">
+                                <h3 className="font-black text-slate-800">
+                                  {item.name}
+                                </h3>
+                                <p className="mt-1 text-sm font-bold text-pink-500">
+                                  {item.priceLabel}
+                                </p>
+                                <div className="mt-3 flex items-center justify-between gap-3">
+                                  <div className="flex items-center rounded-full bg-slate-100 p-1">
+                                    <button
+                                      type="button"
+                                      onClick={() => changeCartQuantity(item.key, -1)}
+                                      className="flex h-9 w-9 items-center justify-center rounded-full bg-white text-xl font-black text-slate-700 shadow-sm"
+                                      aria-label={`Decrease ${item.name} quantity`}
+                                    >
+                                      &minus;
+                                    </button>
+                                    <span
+                                      className="w-10 text-center font-black text-slate-800"
+                                      aria-label={`${item.quantity} in cart`}
+                                    >
+                                      {item.quantity}
+                                    </span>
+                                    <button
+                                      type="button"
+                                      onClick={() => changeCartQuantity(item.key, 1)}
+                                      className="flex h-9 w-9 items-center justify-center rounded-full bg-white text-xl font-black text-slate-700 shadow-sm"
+                                      aria-label={`Increase ${item.name} quantity`}
+                                    >
+                                      +
+                                    </button>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => removeFromCart(item.key)}
+                                    className="text-sm font-black text-red-500 hover:text-red-700"
+                                  >
+                                    Remove
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="border-t border-pink-100 bg-white p-5">
+                        <p className="text-center text-sm font-bold text-slate-500">
+                          Your selected items are saved on this device.
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => setIsCartOpen(false)}
+                          className="mt-4 w-full rounded-2xl bg-pink-500 px-6 py-4 font-black text-white shadow-lg hover:bg-pink-600"
+                        >
+                          Continue Shopping
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </aside>
+              </div>
+            )}
+
             <footer className="mt-20 rounded-t-[5rem] bg-slate-900 px-6 py-20 text-center text-white">
               <div className="font-pacifico mb-8 text-4xl text-pink-400">
                 Pastry Pup
@@ -1051,7 +1306,8 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
         price,
         priceOptions,
         img,
-        isSignature
+        isSignature,
+        onAddToCart
       }) => {
         const displayedPrices =
           Array.isArray(priceOptions) && priceOptions.length > 0
@@ -1093,8 +1349,12 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
                 </div>
               ))}
             </div>
-            <button className="mt-3 w-full rounded-2xl bg-slate-900 px-8 py-3 font-black text-white transition-all hover:bg-pink-500">
-              Order
+            <button
+              type="button"
+              onClick={onAddToCart}
+              className="mt-3 w-full rounded-2xl bg-slate-900 px-8 py-3 font-black text-white transition-all hover:bg-pink-500"
+            >
+              Add to Cart
             </button>
           </div>
         </div>
