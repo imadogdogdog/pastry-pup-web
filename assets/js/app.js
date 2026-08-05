@@ -36,7 +36,8 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
       const staffUid = "6flMuzAdeBZBpyBMKz0XP8DAvGt1";
       const playerProfilesKey = "pastryPupPlayerProfiles";
       const activePlayerKey = "pastryPupActivePlayer";
-      const cartStorageKey = "pastryPupCart:v1";
+      const legacyCartStorageKeys = ["pastryPupCart:v2", "pastryPupCart:v1"];
+      const cartStorageKey = "pastryPupCart:v3";
       const fallbackLogo =
         "https://placehold.co/300x300/f9a8d4/ffffff?text=Pastry+Pup";
       const ROUTES = {
@@ -82,11 +83,72 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
         }
       };
 
+      const parsePriceTier = (label) => {
+        if (typeof label !== "string") return null;
+        const priceMatch = label.match(/\$\s*(\d+(?:\.\d{1,2})?)/);
+        if (!priceMatch) return null;
+
+        const normalizedLabel = label.toLowerCase();
+        let quantity = 1;
+        if (/1\s*\/\s*2\s*dozen|half\s+(?:a\s+)?dozen/.test(normalizedLabel)) {
+          quantity = 6;
+        } else if (/(?:^|\s)(?:1|one)\s+dozen/.test(normalizedLabel)) {
+          quantity = 12;
+        } else {
+          const quantityMatch = normalizedLabel.match(/^\s*(\d+)\s+(?:for|@)/);
+          if (quantityMatch) quantity = Number(quantityMatch[1]);
+        }
+
+        const price = Number(priceMatch[1]);
+        return Number.isInteger(quantity) && quantity > 0 && Number.isFinite(price)
+          ? { quantity, price }
+          : null;
+      };
+
+      const getPriceTiers = (item) => {
+        const priceOptions =
+          Array.isArray(item.priceOptions) && item.priceOptions.length > 0
+            ? item.priceOptions
+            : [item.price].filter(Boolean);
+        return priceOptions.map(parsePriceTier).filter(Boolean);
+      };
+
+      const calculateItemTotal = (quantity, priceTiers) => {
+        if (!Number.isInteger(quantity) || quantity < 1 || !priceTiers.length) {
+          return null;
+        }
+        const totals = Array(quantity + 1).fill(Number.POSITIVE_INFINITY);
+        totals[0] = 0;
+        for (let count = 1; count <= quantity; count += 1) {
+          priceTiers.forEach((tier) => {
+            if (tier.quantity <= count && Number.isFinite(totals[count - tier.quantity])) {
+              totals[count] = Math.min(
+                totals[count],
+                totals[count - tier.quantity] + tier.price
+              );
+            }
+          });
+        }
+        return Number.isFinite(totals[quantity]) ? totals[quantity] : null;
+      };
+
+      const formatCurrency = (amount) =>
+        new Intl.NumberFormat("en-CA", {
+          style: "currency",
+          currency: "CAD"
+        }).format(amount);
+
       const loadCart = () => {
         try {
-          const saved = JSON.parse(localStorage.getItem(cartStorageKey) || "[]");
+          const saved = JSON.parse(
+            localStorage.getItem(cartStorageKey) ||
+              legacyCartStorageKeys
+                .map((key) => localStorage.getItem(key))
+                .find(Boolean) ||
+              "[]"
+          );
           if (!Array.isArray(saved)) return [];
-          return saved
+          const normalizedItems = saved
             .filter(
               (item) =>
                 item &&
@@ -102,9 +164,24 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
                 typeof item.priceLabel === "string"
                   ? item.priceLabel.slice(0, 50)
                   : "",
+              menuItemId:
+                typeof item.menuItemId === "string"
+                  ? item.menuItemId
+                  : item.key.split("::")[0],
+              priceTiers: Array.isArray(item.priceTiers)
+                ? item.priceTiers.filter(
+                    (tier) =>
+                      tier &&
+                      Number.isInteger(tier.quantity) &&
+                      tier.quantity > 0 &&
+                      Number.isFinite(tier.price) &&
+                      tier.price >= 0
+                  )
+                : [parsePriceTier(item.priceLabel)].filter(Boolean),
               img: typeof item.img === "string" ? item.img : "",
-              quantity: Math.min(item.quantity, 99)
+              quantity: item.quantity
             }));
+          return normalizedItems;
         } catch {
           return [];
         }
@@ -243,10 +320,19 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
           (total, item) => total + item.quantity,
           0
         );
+        const cartLineTotals = cartItems.map((item) =>
+          calculateItemTotal(item.quantity, item.priceTiers)
+        );
+        const hasUnknownCartPrice = cartLineTotals.some((total) => total === null);
+        const cartTotal = cartLineTotals.reduce(
+          (total, lineTotal) => total + (lineTotal || 0),
+          0
+        );
 
         useEffect(() => {
           try {
             localStorage.setItem(cartStorageKey, JSON.stringify(cartItems));
+            legacyCartStorageKeys.forEach((key) => localStorage.removeItem(key));
           } catch {
             // The cart remains available for the current page visit.
           }
@@ -261,12 +347,17 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
           return () => window.removeEventListener("keydown", closeOnEscape);
         }, [isCartOpen]);
 
-        const addToCart = (item) => {
+        const addToCart = (item, quantityToAdd = 1) => {
+          const addedQuantity =
+            Number.isInteger(quantityToAdd) && quantityToAdd > 0
+              ? quantityToAdd
+              : 1;
           const priceOptions =
             Array.isArray(item.priceOptions) && item.priceOptions.length > 0
               ? item.priceOptions
               : [item.price].filter(Boolean);
           const priceLabel = priceOptions[0] || "Price available on request";
+          const priceTiers = getPriceTiers(item);
           const key = `${item.id || item.name}::${priceLabel}`;
 
           setCartItems((currentItems) => {
@@ -276,7 +367,11 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
             if (existingItem) {
               return currentItems.map((cartItem) =>
                 cartItem.key === key
-                  ? { ...cartItem, quantity: Math.min(cartItem.quantity + 1, 99) }
+                  ? {
+                      ...cartItem,
+                      priceTiers,
+                      quantity: cartItem.quantity + addedQuantity
+                    }
                   : cartItem
               );
             }
@@ -284,23 +379,25 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
               ...currentItems,
               {
                 key,
+                menuItemId: item.id || item.name,
                 name: item.name,
                 priceLabel,
+                priceTiers,
                 img: item.img || "",
-                quantity: 1
+                quantity: addedQuantity
               }
             ];
           });
         };
 
         const changeCartQuantity = (key, change) => {
-          setCartItems((currentItems) =>
-            currentItems.flatMap((item) => {
+          setCartItems((currentItems) => {
+            return currentItems.flatMap((item) => {
               if (item.key !== key) return [item];
-              const quantity = Math.min(item.quantity + change, 99);
+              const quantity = item.quantity + change;
               return quantity > 0 ? [{ ...item, quantity }] : [];
-            })
-          );
+            });
+          });
         };
 
         const removeFromCart = (key) => {
@@ -308,6 +405,28 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
             currentItems.filter((item) => item.key !== key)
           );
         };
+
+        useEffect(() => {
+          if (menuItems.length === 0) return;
+          const menuById = new Map(menuItems.map((item) => [item.id, item]));
+          setCartItems((currentItems) =>
+            currentItems.map((cartItem) => {
+              const menuItem = menuById.get(cartItem.menuItemId);
+              if (!menuItem) return cartItem;
+              const priceOptions =
+                Array.isArray(menuItem.priceOptions) &&
+                menuItem.priceOptions.length > 0
+                  ? menuItem.priceOptions
+                  : [menuItem.price].filter(Boolean);
+              return {
+                ...cartItem,
+                priceLabel:
+                  priceOptions[0] || "Price available on request",
+                priceTiers: getPriceTiers(menuItem)
+              };
+            })
+          );
+        }, [menuItems]);
 
         useEffect(() => {
           try {
@@ -786,7 +905,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
                   <MenuItem
                     key={item.id}
                     {...item}
-                    onAddToCart={() => addToCart(item)}
+                    onAddToCart={(quantity) => addToCart(item, quantity)}
                   />
                 ))}
                 {menuItems.length === 0 && (
@@ -1135,7 +1254,9 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
                   ) : (
                     <>
                       <div className="flex-1 space-y-4 overflow-y-auto p-5">
-                        {cartItems.map((item) => (
+                        {cartItems.map((item, index) => {
+                          const lineTotal = cartLineTotals[index];
+                          return (
                           <div
                             key={item.key}
                             className="rounded-[2rem] bg-white p-4 shadow-md"
@@ -1154,9 +1275,17 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
                                   {item.name}
                                 </h3>
                                 <p className="mt-1 text-sm font-bold text-pink-500">
-                                  {item.priceLabel}
+                                  Starting at {item.priceLabel}
                                 </p>
-                                <div className="mt-3 flex items-center justify-between gap-3">
+                                <p
+                                  className="mt-1 text-lg font-black text-slate-800"
+                                  aria-label={`${item.name} subtotal`}
+                                >
+                                  {lineTotal === null
+                                    ? "Price unavailable"
+                                    : formatCurrency(lineTotal)}
+                                </p>
+                                <div className="mt-3 flex flex-wrap items-center gap-2">
                                   <div className="flex items-center rounded-full bg-slate-100 p-1">
                                     <button
                                       type="button"
@@ -1183,8 +1312,16 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
                                   </div>
                                   <button
                                     type="button"
+                                    onClick={() => changeCartQuantity(item.key, 6)}
+                                    className="rounded-full bg-pink-100 px-4 py-3 text-sm font-black text-pink-600 hover:bg-pink-200"
+                                    aria-label={`Add half dozen ${item.name}`}
+                                  >
+                                    +6
+                                  </button>
+                                  <button
+                                    type="button"
                                     onClick={() => removeFromCart(item.key)}
-                                    className="text-sm font-black text-red-500 hover:text-red-700"
+                                    className="ml-auto text-sm font-black text-red-500 hover:text-red-700"
                                   >
                                     Remove
                                   </button>
@@ -1192,11 +1329,25 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
                               </div>
                             </div>
                           </div>
-                        ))}
+                          );
+                        })}
                       </div>
                       <div className="border-t border-pink-100 bg-white p-5">
-                        <p className="text-center text-sm font-bold text-slate-500">
-                          Your selected items are saved on this device.
+                        <div className="flex items-center justify-between gap-4">
+                          <span className="text-lg font-black text-slate-700">
+                            Order total
+                          </span>
+                          <span
+                            className="text-3xl font-black text-pink-500"
+                            aria-label="Order total"
+                          >
+                            {hasUnknownCartPrice
+                              ? "Unavailable"
+                              : formatCurrency(cartTotal)}
+                          </span>
+                        </div>
+                        <p className="mt-2 text-center text-xs font-bold text-slate-500">
+                          Menu deals are applied automatically at any quantity.
                         </p>
                         <button
                           type="button"
@@ -1349,13 +1500,24 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
                 </div>
               ))}
             </div>
-            <button
-              type="button"
-              onClick={onAddToCart}
-              className="mt-3 w-full rounded-2xl bg-slate-900 px-8 py-3 font-black text-white transition-all hover:bg-pink-500"
-            >
-              Add to Cart
-            </button>
+            <div className="mt-3 grid grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={() => onAddToCart(1)}
+                className="rounded-2xl bg-slate-900 px-4 py-3 font-black text-white transition-all hover:bg-pink-500"
+                aria-label={`Add 1 ${name} to cart`}
+              >
+                Add 1
+              </button>
+              <button
+                type="button"
+                onClick={() => onAddToCart(6)}
+                className="rounded-2xl bg-pink-500 px-4 py-3 font-black text-white transition-all hover:bg-pink-600"
+                aria-label={`Add 6 ${name} to cart`}
+              >
+                Add 6
+              </button>
+            </div>
           </div>
         </div>
         );
