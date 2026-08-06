@@ -301,6 +301,8 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
         const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
         const [cartItems, setCartItems] = useState(loadCart);
         const [isCartOpen, setIsCartOpen] = useState(false);
+        const [isClearCartConfirming, setIsClearCartConfirming] = useState(false);
+        const [checkoutNotice, setCheckoutNotice] = useState(null);
         const [playerProfiles, setPlayerProfiles] = useState(loadPlayerProfiles);
         const [activePlayerId, setActivePlayerId] = useState(() => {
           try {
@@ -328,6 +330,29 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
           (total, lineTotal) => total + (lineTotal || 0),
           0
         );
+        const orderSummary = [
+          "Hi Pastry Pup,",
+          "",
+          "I'd like to order:",
+          ...cartItems.map((item, index) => {
+            const lineTotal = cartLineTotals[index];
+            const price = lineTotal === null ? "Price to be confirmed" : formatCurrency(lineTotal);
+            return `- ${item.quantity} x ${item.name} — ${price}`;
+          }),
+          "",
+          `Order total: ${hasUnknownCartPrice ? "To be confirmed" : formatCurrency(cartTotal)}`,
+          "",
+          "Name:",
+          "Preferred pickup date and time:",
+          "Phone number:",
+          "",
+          "Please confirm availability and send me a secure Square invoice/payment link.",
+          "",
+          "Thank you!"
+        ].join("\n");
+        const squareInvoiceEmailUrl = `mailto:${staffEmail}?subject=${encodeURIComponent(
+          "Pastry Pup order request"
+        )}&body=${encodeURIComponent(orderSummary)}`;
 
         useEffect(() => {
           try {
@@ -339,7 +364,10 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
         }, [cartItems]);
 
         useEffect(() => {
-          if (!isCartOpen) return undefined;
+          if (!isCartOpen) {
+            setIsClearCartConfirming(false);
+            return undefined;
+          }
           const closeOnEscape = (event) => {
             if (event.key === "Escape") setIsCartOpen(false);
           };
@@ -404,6 +432,33 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
           setCartItems((currentItems) =>
             currentItems.filter((item) => item.key !== key)
           );
+        };
+
+        const clearCart = useCallback(() => {
+          setCartItems([]);
+          setIsClearCartConfirming(false);
+          try {
+            localStorage.removeItem(cartStorageKey);
+            legacyCartStorageKeys.forEach((key) => localStorage.removeItem(key));
+          } catch {
+            // The cart is still cleared for the current page visit.
+          }
+        }, []);
+
+        const copyOrderDetails = async () => {
+          try {
+            await navigator.clipboard.writeText(orderSummary);
+            setCheckoutNotice({
+              type: "success",
+              message: "Order details copied. Email them to Pastry Pup to receive your Square invoice."
+            });
+          } catch (error) {
+            console.error("Copy order details:", error);
+            setCheckoutNotice({
+              type: "error",
+              message: "Your browser could not copy the order. Use the email button instead."
+            });
+          }
         };
 
         useEffect(() => {
@@ -706,6 +761,28 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 
         const HomeView = () => (
           <div className="min-h-screen bg-[#FEFCE8] text-slate-800 scroll-smooth">
+            {checkoutNotice && !isCartOpen && (
+              <div
+                role={checkoutNotice.type === "error" ? "alert" : "status"}
+                className={`fixed left-1/2 top-24 z-[105] flex w-[calc(100%-2rem)] max-w-xl -translate-x-1/2 items-center justify-between gap-4 rounded-2xl px-5 py-4 font-black shadow-2xl ${
+                  checkoutNotice.type === "success"
+                    ? "bg-emerald-600 text-white"
+                    : checkoutNotice.type === "error"
+                      ? "bg-red-600 text-white"
+                      : "bg-slate-900 text-white"
+                }`}
+              >
+                <span>{checkoutNotice.message}</span>
+                <button
+                  type="button"
+                  onClick={() => setCheckoutNotice(null)}
+                  className="shrink-0 rounded-full bg-white/20 px-3 py-1 text-lg"
+                  aria-label="Dismiss checkout message"
+                >
+                  &times;
+                </button>
+              </div>
+            )}
             <header className="fixed top-0 z-50 w-full border-b border-pink-100 bg-white/90 backdrop-blur-md">
               <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
                 <a
@@ -1349,10 +1426,92 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
                         <p className="mt-2 text-center text-xs font-bold text-slate-500">
                           Menu deals are applied automatically at any quantity.
                         </p>
+                        <div className="mt-4 rounded-2xl bg-pink-50 p-4">
+                          <p className="text-center text-sm font-black text-slate-700">
+                            How checkout works
+                          </p>
+                          <p className="mt-1 text-center text-xs font-bold leading-relaxed text-slate-500">
+                            Send your order request, then Pastry Pup will confirm availability and email you a secure Square invoice.
+                          </p>
+                        </div>
+                        <a
+                          href={hasUnknownCartPrice ? undefined : squareInvoiceEmailUrl}
+                          onClick={(event) => {
+                            if (hasUnknownCartPrice) {
+                              event.preventDefault();
+                              return;
+                            }
+                            setCheckoutNotice({
+                              type: "success",
+                              message: "Your email app is opening with the order filled in. Your cart will stay saved."
+                            });
+                          }}
+                          aria-disabled={hasUnknownCartPrice}
+                          className={`mt-3 block w-full rounded-2xl px-6 py-4 text-center font-black text-white shadow-lg transition ${
+                            hasUnknownCartPrice
+                              ? "cursor-not-allowed bg-slate-300"
+                              : "bg-slate-900 hover:bg-black"
+                          }`}
+                        >
+                          Email order for Square invoice
+                        </a>
+                        <button
+                          type="button"
+                          onClick={copyOrderDetails}
+                          className="mt-2 w-full rounded-2xl border-2 border-slate-200 bg-white px-6 py-3 font-black text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
+                        >
+                          Copy order details
+                        </button>
+                        <p className="mt-2 text-center text-xs font-bold text-slate-500">
+                          Payment is handled securely by Square after availability is confirmed.
+                        </p>
+                        {checkoutNotice && (
+                          <p
+                            className={`mt-3 rounded-xl p-3 text-center text-sm font-bold ${
+                              checkoutNotice.type === "error"
+                                ? "bg-red-50 text-red-700"
+                                : "bg-emerald-50 text-emerald-700"
+                            }`}
+                            role={checkoutNotice.type === "error" ? "alert" : "status"}
+                          >
+                            {checkoutNotice.message}
+                          </p>
+                        )}
+                        {isClearCartConfirming ? (
+                          <div className="mt-4 rounded-2xl bg-red-50 p-3 text-center">
+                            <p className="text-sm font-black text-red-700">
+                              Remove every item from your cart?
+                            </p>
+                            <div className="mt-3 grid grid-cols-2 gap-2">
+                              <button
+                                type="button"
+                                onClick={() => setIsClearCartConfirming(false)}
+                                className="rounded-xl bg-white px-4 py-3 font-black text-slate-600 shadow-sm hover:bg-slate-50"
+                              >
+                                Cancel
+                              </button>
+                              <button
+                                type="button"
+                                onClick={clearCart}
+                                className="rounded-xl bg-red-500 px-4 py-3 font-black text-white shadow-sm hover:bg-red-600"
+                              >
+                                Yes, clear cart
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => setIsClearCartConfirming(true)}
+                            className="mt-4 w-full rounded-2xl border-2 border-red-200 bg-white px-6 py-3 font-black text-red-500 transition hover:border-red-300 hover:bg-red-50"
+                          >
+                            Clear cart
+                          </button>
+                        )}
                         <button
                           type="button"
                           onClick={() => setIsCartOpen(false)}
-                          className="mt-4 w-full rounded-2xl bg-pink-500 px-6 py-4 font-black text-white shadow-lg hover:bg-pink-600"
+                          className="mt-3 w-full rounded-2xl bg-pink-500 px-6 py-4 font-black text-white shadow-lg hover:bg-pink-600"
                         >
                           Continue Shopping
                         </button>
@@ -2155,29 +2314,77 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
         const [lives, setLives] = useState(5);
         const [scoreSaved, setScoreSaved] = useState(false);
         const [scorePlayer, setScorePlayer] = useState(null);
+        const [levelIndex, setLevelIndex] = useState(0);
+        const [musicError, setMusicError] = useState("");
 
         const modes = {
-          easy: { label: "Easy", hands: "1 hand", lanes: 2, bpm: 100, lives: 6, chords: false },
-          normal: { label: "Normal", hands: "1 hand", lanes: 3, bpm: 116, lives: 5, chords: false },
-          hard: { label: "Hard", hands: "2 hands", lanes: 4, bpm: 132, lives: 4, chords: true }
+          easy: { label: "Easy", detail: "Holds", lanes: 2, lives: 7, chords: false },
+          normal: { label: "Normal", detail: "Holds + chords", lanes: 3, lives: 6, chords: true },
+          hard: { label: "Hard", detail: "Fast hold chords", lanes: 4, lives: 5, chords: true }
         };
+
+        const songs = [
+          {
+            title: "Dungeon Run",
+            artist: "whittakerb1987",
+            bpm: 100,
+            license: "CC0",
+            href: "https://opengameart.org/content/dungeon-run",
+            src: "https://opengameart.org/sites/default/files/DungeonRun100bpm.wav"
+          },
+          {
+            title: "Better Days",
+            artist: "Uederson",
+            bpm: 120,
+            license: "CC0",
+            href: "https://opengameart.org/content/music-better-days",
+            src: "https://opengameart.org/sites/default/files/better%20days_0.ogg"
+          },
+          {
+            title: "Glitch Beat",
+            artist: "tcarisland",
+            bpm: 140,
+            license: "CC BY 4.0",
+            href: "https://opengameart.org/content/glitch-beat",
+            src: "https://opengameart.org/sites/default/files/GlitchBeat_0.mp3"
+          }
+        ];
 
         const stopMusic = () => {
           const audio = audioRef.current;
           audioRef.current = null;
-          if (audio && audio.state !== "closed") audio.close().catch(() => {});
+          if (audio) {
+            audio.pause();
+            audio.removeAttribute("src");
+            audio.load();
+          }
         };
 
         useEffect(() => () => stopMusic(), []);
 
-        const startGame = (mode) => {
+        const playLevel = async (index) => {
           stopMusic();
-          const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-          if (AudioContextClass) {
-            const audio = new AudioContextClass();
-            audio.resume().catch(() => {});
-            audioRef.current = audio;
+          setLevelIndex(index);
+          setMusicError("");
+          setGameStatus("loading");
+          const audio = new Audio(songs[index].src);
+          audio.preload = "auto";
+          audio.volume = 0.82;
+          audioRef.current = audio;
+          try {
+            await audio.play();
+            if (audioRef.current === audio) setGameStatus("playing");
+          } catch (error) {
+            console.error("Treat Tap music:", error);
+            if (audioRef.current === audio) {
+              stopMusic();
+              setMusicError("The song could not load. Check your connection and try again.");
+              setGameStatus("start");
+            }
           }
+        };
+
+        const startGame = (mode) => {
           setDifficulty(mode);
           setScore(0);
           setCombo(0);
@@ -2185,7 +2392,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
           setLives(modes[mode].lives);
           setScoreSaved(false);
           setScorePlayer(player);
-          setGameStatus("playing");
+          playLevel(0);
         };
 
         useEffect(() => {
@@ -2210,75 +2417,152 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
           const height = 560;
           const targetY = height - 92;
           const travelTime = 1900;
-          const hitWindow = difficulty === "hard" ? 145 : 185;
+          const hitWindow = difficulty === "hard" ? 135 : difficulty === "normal" ? 165 : 195;
+          const releaseWindow = 110;
           const mode = modes[difficulty];
-          const beatMs = 60000 / mode.bpm;
-          const totalBeats = 52;
+          const song = songs[levelIndex];
+          const beatMs = 60000 / song.bpm;
+          const totalBeats = 40;
           const laneColors = ["#fb7185", "#a78bfa", "#38bdf8", "#fbbf24"];
-          const notes = [];
+          const groups = [];
+          const activeLaneCounts = Array(mode.lanes).fill(0);
+          const pointerLanes = new Map();
           let elapsed = 0;
           let animationId;
-          let currentScore = 0;
-          let currentCombo = 0;
-          let currentBest = 0;
-          let currentLives = mode.lives;
-          let lastMusicBeat = -1;
-          const startTime = performance.now();
+          let currentScore = score;
+          let currentCombo = combo;
+          let currentBest = bestCombo;
+          let currentLives = lives;
+          let feedback = { text: "", color: "#fff", until: 0 };
 
-          for (let beat = 4; beat < totalBeats; beat += 1) {
-            const firstLane = Math.floor(Math.random() * mode.lanes);
-            notes.push({ lane: firstLane, hitTime: beat * beatMs, hit: false, missed: false });
-            if (mode.chords && beat % 4 === 2) {
-              let secondLane = Math.floor(Math.random() * mode.lanes);
-              if (secondLane === firstLane) secondLane = (secondLane + 2) % mode.lanes;
-              notes.push({ lane: secondLane, hitTime: beat * beatMs, hit: false, missed: false });
+          const step = difficulty === "easy" ? 1.5 : difficulty === "normal" ? 1 : 0.5;
+          let stepIndex = 0;
+          for (let beat = 4; beat < totalBeats; beat += step) {
+            const isWholeBeat = Number.isInteger(beat);
+            const firstLane = (stepIndex * 3 + Math.floor(beat / 4) + levelIndex) % mode.lanes;
+            const isChord = mode.chords && isWholeBeat && beat % 4 === 2;
+            const isHold = isWholeBeat && beat % 8 === 4;
+            const notes = [{
+              lane: firstLane,
+              duration: isHold ? beatMs * (difficulty === "hard" ? 1.5 : 2) : 0,
+              started: false,
+              completed: false
+            }];
+            if (isChord) {
+              notes.push({
+                lane: (firstLane + (mode.lanes === 3 ? 1 : 2)) % mode.lanes,
+                duration: difficulty === "hard" && beat % 8 === 2 ? beatMs : 0,
+                started: false,
+                completed: false
+              });
             }
+            groups.push({
+              id: `level-${levelIndex}-beat-${beat}`,
+              hitTime: beat * beatMs,
+              notes,
+              started: false,
+              completed: false,
+              missed: false
+            });
+            stepIndex += 1;
           }
 
-          const playTone = (frequency, duration, type = "sine", volume = 0.05) => {
-            const audio = audioRef.current;
-            if (!audio || audio.state === "closed") return;
-            const oscillator = audio.createOscillator();
-            const gain = audio.createGain();
-            oscillator.type = type;
-            oscillator.frequency.value = frequency;
-            gain.gain.setValueAtTime(volume, audio.currentTime);
-            gain.gain.exponentialRampToValueAtTime(0.001, audio.currentTime + duration);
-            oscillator.connect(gain);
-            gain.connect(audio.destination);
-            oscillator.start();
-            oscillator.stop(audio.currentTime + duration);
-          };
-
-          const playMusicBeat = (beat) => {
-            const melody = [261.63, 329.63, 392, 523.25, 392, 329.63, 293.66, 349.23];
-            playTone(melody[beat % melody.length], 0.16, "triangle", 0.045);
-            if (beat % 4 === 0) playTone(130.81, 0.22, "sine", 0.07);
-            if (beat % 2 === 1) playTone(880, 0.045, "square", 0.012);
-          };
-
-          const finishGame = () => {
-            setGameStatus("over");
+          const finishGame = (completedSong = true) => {
+            setGameStatus(completedSong && levelIndex < songs.length - 1 ? "levelComplete" : "over");
             stopMusic();
           };
 
-          const hitLane = (lane) => {
-            const candidate = notes
-              .filter((note) => !note.hit && !note.missed && note.lane === lane && Math.abs(note.hitTime - elapsed) <= hitWindow)
+          const applyCombo = (amount) => {
+            currentCombo += amount;
+            currentBest = Math.max(currentBest, currentCombo);
+            setCombo(currentCombo);
+            setBestCombo(currentBest);
+          };
+
+          const missGroup = (group) => {
+            if (group.missed || group.completed) return;
+            group.missed = true;
+            currentLives -= 1;
+            currentCombo = 0;
+            feedback = { text: "MISS", color: "#fda4af", until: elapsed + 450 };
+            setLives(currentLives);
+            setCombo(0);
+          };
+
+          const completeHoldGroup = (group) => {
+            if (group.completed || group.missed) return;
+            group.completed = true;
+            const holdCount = group.notes.filter((note) => note.duration > 0).length;
+            currentScore += 180 * Math.max(1, holdCount);
+            applyCombo(Math.max(1, holdCount));
+            feedback = {
+              text: holdCount > 1 ? "HOLD CHORD!" : "HOLD!",
+              color: "#fde68a",
+              until: elapsed + 650
+            };
+            setScore(currentScore);
+          };
+
+          const startGroup = (group) => {
+            group.started = true;
+            group.notes.forEach((note) => {
+              note.started = true;
+              if (!note.duration) note.completed = true;
+            });
+            currentScore += group.notes.length * 100 + (group.notes.length > 1 ? 120 : 0);
+            applyCombo(group.notes.length);
+            feedback = {
+              text: group.notes.length > 1
+                ? "CHORD!"
+                : group.notes.some((note) => note.duration)
+                  ? "HOLD"
+                  : "SWEET!",
+              color: group.notes.length > 1 ? "#67e8f9" : "#fff",
+              until: elapsed + 420
+            };
+            setScore(currentScore);
+            if (group.notes.every((note) => note.completed)) group.completed = true;
+          };
+
+          const pressLane = (lane) => {
+            activeLaneCounts[lane] += 1;
+            const candidate = groups
+              .filter(
+                (group) =>
+                  !group.started &&
+                  !group.missed &&
+                  group.notes.some((note) => note.lane === lane) &&
+                  Math.abs(group.hitTime - elapsed) <= hitWindow
+              )
               .sort((a, b) => Math.abs(a.hitTime - elapsed) - Math.abs(b.hitTime - elapsed))[0];
             if (!candidate) {
               currentCombo = 0;
               setCombo(0);
               return;
             }
-            candidate.hit = true;
-            currentCombo += 1;
-            currentBest = Math.max(currentBest, currentCombo);
-            currentScore += 100 + Math.min(400, currentCombo * 10);
-            setCombo(currentCombo);
-            setBestCombo(currentBest);
-            setScore(currentScore);
-            playTone(520 + lane * 85, 0.1, "sine", 0.075);
+            const allChordLanesDown = candidate.notes.every(
+              (note) => activeLaneCounts[note.lane] > 0
+            );
+            if (allChordLanesDown) startGroup(candidate);
+          };
+
+          const releaseLane = (lane) => {
+            activeLaneCounts[lane] = Math.max(0, activeLaneCounts[lane] - 1);
+            if (activeLaneCounts[lane] > 0) return;
+            groups.forEach((group) => {
+              if (!group.started || group.completed || group.missed) return;
+              const heldNote = group.notes.find(
+                (note) => note.lane === lane && note.duration > 0 && !note.completed
+              );
+              if (!heldNote) return;
+              const endTime = group.hitTime + heldNote.duration;
+              if (elapsed < endTime - releaseWindow) {
+                missGroup(group);
+              } else {
+                heldNote.completed = true;
+                if (group.notes.every((note) => note.completed)) completeHoldGroup(group);
+              }
+            });
           };
 
           const handlePointerDown = (event) => {
@@ -2286,7 +2570,16 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
             const rect = canvas.getBoundingClientRect();
             const pointerX = ((event.clientX - rect.left) / rect.width) * width;
             const lane = Math.max(0, Math.min(mode.lanes - 1, Math.floor(pointerX / (width / mode.lanes))));
-            hitLane(lane);
+            pointerLanes.set(event.pointerId, lane);
+            canvas.setPointerCapture?.(event.pointerId);
+            pressLane(lane);
+          };
+
+          const handlePointerUp = (event) => {
+            const lane = pointerLanes.get(event.pointerId);
+            if (lane === undefined) return;
+            pointerLanes.delete(event.pointerId);
+            releaseLane(lane);
           };
 
           const handleKeyDown = (event) => {
@@ -2294,17 +2587,23 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
             const lane = laneKeys.indexOf(event.key.toLowerCase());
             if (lane >= 0 && !event.repeat) {
               event.preventDefault();
-              hitLane(lane);
+              pressLane(lane);
             }
           };
 
-          const draw = (time) => {
-            elapsed = time - startTime;
-            const musicBeat = Math.floor(elapsed / beatMs);
-            if (musicBeat !== lastMusicBeat) {
-              lastMusicBeat = musicBeat;
-              playMusicBeat(musicBeat);
+          const handleKeyUp = (event) => {
+            const laneKeys = mode.lanes === 2 ? ["f", "j"] : mode.lanes === 3 ? ["d", "f", "j"] : ["d", "f", "j", "k"];
+            const lane = laneKeys.indexOf(event.key.toLowerCase());
+            if (lane >= 0) {
+              event.preventDefault();
+              releaseLane(lane);
             }
+          };
+
+          const draw = () => {
+            const audio = audioRef.current;
+            if (!audio) return;
+            elapsed = audio.currentTime * 1000;
 
             ctx.clearRect(0, 0, width, height);
             const gradient = ctx.createLinearGradient(0, 0, 0, height);
@@ -2321,7 +2620,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
               ctx.lineWidth = 2;
               ctx.strokeRect(lane * laneWidth, 0, laneWidth, height);
               ctx.fillStyle = laneColors[lane];
-              ctx.globalAlpha = 0.45;
+              ctx.globalAlpha = activeLaneCounts[lane] > 0 ? 0.95 : 0.45;
               ctx.fillRect(lane * laneWidth + 8, targetY - 10, laneWidth - 16, 20);
               ctx.globalAlpha = 1;
               ctx.fillStyle = "#fff";
@@ -2331,85 +2630,171 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
               ctx.fillText(laneLabels[lane], lane * laneWidth + laneWidth / 2, height - 28);
             }
 
-            for (const note of notes) {
-              if (note.hit || note.missed) continue;
-              const y = targetY - ((note.hitTime - elapsed) / travelTime) * targetY;
-              if (y < -40 || y > height + 40) continue;
-              const x = note.lane * laneWidth + laneWidth / 2;
-              ctx.beginPath();
-              ctx.arc(x, y, Math.min(30, laneWidth * 0.28), 0, Math.PI * 2);
-              ctx.fillStyle = laneColors[note.lane];
-              ctx.fill();
-              ctx.strokeStyle = "#fff";
-              ctx.lineWidth = 4;
-              ctx.stroke();
-              ctx.fillStyle = "#fff";
-              ctx.font = "22px serif";
-              ctx.textAlign = "center";
-              ctx.fillText("\u{1F36A}", x, y + 8);
-            }
+            for (const group of groups) {
+              if (group.missed || group.completed) continue;
+              const headY = group.started
+                ? targetY
+                : targetY - ((group.hitTime - elapsed) / travelTime) * targetY;
+              if (headY < -180 || headY > height + 40) continue;
 
-            for (const note of notes) {
-              if (!note.hit && !note.missed && elapsed > note.hitTime + hitWindow) {
-                note.missed = true;
-                currentLives -= 1;
-                currentCombo = 0;
-                setLives(currentLives);
-                setCombo(0);
-                if (currentLives <= 0) {
-                  finishGame();
-                  return;
+              if (!group.started && group.notes.length > 1) {
+                const laneXs = group.notes.map((note) => note.lane * laneWidth + laneWidth / 2);
+                ctx.strokeStyle = "rgba(103,232,249,0.8)";
+                ctx.lineWidth = 10;
+                ctx.beginPath();
+                ctx.moveTo(Math.min(...laneXs), headY);
+                ctx.lineTo(Math.max(...laneXs), headY);
+                ctx.stroke();
+              }
+
+              for (const note of group.notes) {
+                if (note.completed) continue;
+                const x = note.lane * laneWidth + laneWidth / 2;
+                if (note.duration > 0) {
+                  const endY = targetY - ((group.hitTime + note.duration - elapsed) / travelTime) * targetY;
+                  const tailTop = Math.min(headY, endY);
+                  const tailHeight = Math.abs(headY - endY);
+                  ctx.fillStyle = laneColors[note.lane];
+                  ctx.globalAlpha = 0.62;
+                  ctx.fillRect(
+                    x - Math.min(18, laneWidth * 0.16),
+                    tailTop,
+                    Math.min(36, laneWidth * 0.32),
+                    tailHeight
+                  );
+                  ctx.globalAlpha = 1;
                 }
+                ctx.beginPath();
+                ctx.arc(x, headY, Math.min(30, laneWidth * 0.28), 0, Math.PI * 2);
+                ctx.fillStyle = laneColors[note.lane];
+                ctx.fill();
+                ctx.strokeStyle = note.duration ? "#fde68a" : "#fff";
+                ctx.lineWidth = note.duration ? 6 : 4;
+                ctx.stroke();
+                ctx.fillStyle = "#fff";
+                ctx.font = "22px serif";
+                ctx.textAlign = "center";
+                ctx.fillText(note.duration ? "\u{1F9B4}" : "\u{1F36A}", x, headY + 8);
               }
             }
 
-            if (elapsed > totalBeats * beatMs + 800) {
-              finishGame();
+            for (const group of groups) {
+              if (!group.started && !group.missed && elapsed > group.hitTime + hitWindow) {
+                missGroup(group);
+              }
+              if (group.started && !group.completed && !group.missed) {
+                group.notes.forEach((note) => {
+                  if (note.duration > 0 && !note.completed && elapsed >= group.hitTime + note.duration) {
+                    note.completed = true;
+                  }
+                });
+                if (group.notes.every((note) => note.completed)) completeHoldGroup(group);
+              }
+            }
+
+            if (feedback.until > elapsed) {
+              ctx.fillStyle = feedback.color;
+              ctx.font = "900 34px Inter, sans-serif";
+              ctx.textAlign = "center";
+              ctx.fillText(feedback.text, width / 2, 78);
+            }
+
+            if (audio.ended || elapsed > totalBeats * beatMs + 800 || currentLives <= 0) {
+              finishGame(currentLives > 0);
               return;
             }
             animationId = requestAnimationFrame(draw);
           };
 
           canvas.addEventListener("pointerdown", handlePointerDown);
+          canvas.addEventListener("pointerup", handlePointerUp);
+          canvas.addEventListener("pointercancel", handlePointerUp);
           window.addEventListener("keydown", handleKeyDown);
+          window.addEventListener("keyup", handleKeyUp);
           animationId = requestAnimationFrame(draw);
           return () => {
             cancelAnimationFrame(animationId);
             canvas.removeEventListener("pointerdown", handlePointerDown);
+            canvas.removeEventListener("pointerup", handlePointerUp);
+            canvas.removeEventListener("pointercancel", handlePointerUp);
             window.removeEventListener("keydown", handleKeyDown);
+            window.removeEventListener("keyup", handleKeyUp);
           };
-        }, [gameStatus, difficulty]);
+        }, [gameStatus, difficulty, levelIndex]);
 
         return (
-          <div className="flex min-h-[100dvh] flex-col items-center justify-center bg-gradient-to-b from-indigo-950 via-purple-900 to-fuchsia-900 p-4 text-white">
+          <div className="flex min-h-[100dvh] flex-col items-center justify-center bg-gradient-to-b from-indigo-950 via-purple-900 to-fuchsia-900 px-4 pb-4 pt-20 text-white sm:p-4">
             <div className="w-full max-w-xl rounded-[2.5rem] border-4 border-fuchsia-300 bg-slate-950/80 p-5 text-center shadow-2xl sm:p-8">
               <h1 className="font-pacifico mb-3 text-4xl text-pink-300 sm:text-5xl">Treat Tap Revolution</h1>
               {gameStatus === "start" && (
                 <div className="space-y-5">
                   <p className="rounded-2xl bg-white/10 p-4 font-bold leading-relaxed text-purple-100">
-                    Tap each lane when its treat reaches the glowing bar. Easy and Normal use one-finger patterns. Hard adds two-note chords—use two fingers together. Turn your sound on!
+                    Tap treats at the glowing bar. Hold bones until their tails finish, and press linked treats together with two fingers. Clear all three songs to finish the set!
                   </p>
+                  {musicError && <p className="font-bold text-rose-300" role="alert">{musicError}</p>}
                   <div className="grid gap-3 sm:grid-cols-3">
                     {Object.entries(modes).map(([key, mode]) => (
                       <button key={key} onClick={() => startGame(key)} className="rounded-2xl bg-fuchsia-500 px-4 py-4 font-black shadow-lg transition hover:bg-fuchsia-400 active:scale-95">
-                        {mode.label}<span className="mt-1 block text-xs text-fuchsia-100">{mode.hands} · {mode.bpm} BPM</span>
+                        {mode.label}<span className="mt-1 block text-xs text-fuchsia-100">{mode.detail}</span>
                       </button>
                     ))}
                   </div>
+                  <div className="space-y-2 rounded-2xl bg-white/5 p-4 text-left">
+                    {songs.map((song, index) => (
+                      <div key={song.title} className="flex items-center justify-between gap-3 text-sm font-bold text-purple-100">
+                        <span><span className="mr-2 text-pink-300">{index + 1}</span>{song.title}</span>
+                        <span className="text-xs text-purple-300">{song.bpm} BPM</span>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="text-xs font-semibold text-purple-300">
+                    Music from OpenGameArt: {songs.map((song, index) => (
+                      <React.Fragment key={song.title}>
+                        {index > 0 ? " · " : ""}<a className="underline hover:text-white" href={song.href} target="_blank" rel="noreferrer">{song.title}</a> by {song.artist} ({song.license})
+                      </React.Fragment>
+                    ))}
+                  </p>
+                </div>
+              )}
+              {gameStatus === "loading" && (
+                <div className="space-y-4 py-10" role="status">
+                  <div className="mx-auto h-12 w-12 animate-spin rounded-full border-4 border-fuchsia-200 border-t-transparent" />
+                  <p className="font-black text-purple-100">Loading level {levelIndex + 1}: {songs[levelIndex].title}...</p>
                 </div>
               )}
               {gameStatus === "playing" && (
                 <div className="space-y-3">
+                  <div className="flex items-center justify-center gap-2 text-sm font-black text-purple-200">
+                    <span className="rounded-full bg-white/10 px-3 py-1">Level {levelIndex + 1} / {songs.length}</span>
+                    <span>{songs[levelIndex].title} · {songs[levelIndex].bpm} BPM</span>
+                  </div>
                   <div className="grid grid-cols-3 gap-2 font-black text-pink-200">
                     <span>Score {score}</span><span>Combo {combo}</span><span>Lives {lives}</span>
                   </div>
-                  <canvas ref={canvasRef} width="480" height="560" className="mx-auto block max-h-[72dvh] w-full rounded-3xl border-4 border-fuchsia-300 shadow-2xl" style={{ touchAction: "none", aspectRatio: "6 / 7" }} />
-                  <p className="text-sm font-bold text-purple-200">Tap the lanes—or use {modes[difficulty].lanes === 2 ? "F / J" : modes[difficulty].lanes === 3 ? "D / F / J" : "D / F / J / K"}.</p>
+                  <canvas ref={canvasRef} width="480" height="560" aria-label="Treat Tap rhythm lanes" className="mx-auto block max-h-[72dvh] w-full rounded-3xl border-4 border-fuchsia-300 shadow-2xl" style={{ touchAction: "none", aspectRatio: "6 / 7" }} />
+                  <p className="text-sm font-bold text-purple-200">Tap and hold the lanes—or use {modes[difficulty].lanes === 2 ? "F / J" : modes[difficulty].lanes === 3 ? "D / F / J" : "D / F / J / K"}. Linked treats must be pressed together.</p>
+                </div>
+              )}
+              {gameStatus === "levelComplete" && (
+                <div className="space-y-5">
+                  <h2 className="text-4xl font-black text-cyan-300">Level {levelIndex + 1} Clear!</h2>
+                  <p className="text-xl font-black">{songs[levelIndex].title} complete</p>
+                  <p className="font-bold text-purple-200">Score {score} · Best combo {bestCombo}</p>
+                  <button
+                    onClick={() => {
+                      setLives(Math.min(modes[difficulty].lives, lives + 1));
+                      playLevel(levelIndex + 1);
+                    }}
+                    className="rounded-2xl bg-cyan-400 px-8 py-4 text-xl font-black text-indigo-950 shadow-lg transition hover:bg-cyan-300 active:scale-95"
+                  >
+                    Next: {songs[levelIndex + 1].title}
+                  </button>
                 </div>
               )}
               {gameStatus === "over" && (
                 <div className="space-y-5">
-                  <h2 className="text-4xl font-black text-pink-300">Song Complete!</h2>
+                  <h2 className="text-4xl font-black text-pink-300">{lives > 0 ? "Set Complete!" : "Set Over"}</h2>
+                  <p className="font-bold text-purple-200">{lives > 0 ? "You cleared all three songs!" : `You reached level ${levelIndex + 1}.`}</p>
                   <p className="text-2xl font-black">Score: {score}</p>
                   <p className="font-bold text-purple-200">Best combo: {bestCombo}</p>
                   {scoreSaved && (
