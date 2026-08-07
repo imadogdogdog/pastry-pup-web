@@ -169,17 +169,16 @@ Pushing `main` triggers GitHub's **pages build and deployment** workflow. Verify
 3. Inspect the loaded `assets/js/app.js?v=...` URL and confirm it matches the version in the committed HTML.
 4. Exercise the changed interaction on the public domain.
 
-On 2026-08-06, the first Pages run for the Square redesign commit was cancelled after waiting 15 minutes without receiving a GitHub-hosted runner. It had no build steps or code error. An empty commit was pushed to trigger a fresh run. If this repeats, re-run the Pages workflow from GitHub Actions or push a harmless follow-up commit; do not change Firebase billing.
+On 2026-08-06, the first Pages run for the Square redesign commit was cancelled after waiting 15 minutes without receiving a GitHub-hosted runner. It had no build steps or code error. A harmless empty commit triggered a successful replacement run, and the following documentation deployment also succeeded. If a runner cancellation repeats, re-run the Pages workflow from GitHub Actions or push a harmless follow-up commit; do not change Firebase billing.
 
 ## Current implementation state
 
 - Square invoice checkout redesign is implemented in commit `a965dd4`.
 - The invoice flow was locally verified on desktop and mobile.
 - Treat Tap Revolution has three songs, holds, and multi-finger chords.
-- The first GitHub Pages deployment attempt for `a965dd4` was cancelled before runner assignment; commit `fb9707d` retriggered deployment.
+- The Square redesign and this documentation are live on `pastrypup.shop`; GitHub Pages run 49 completed successfully on 2026-08-06.
 - Three unrelated local files may appear as untracked (`Natural_Peanut_Butter_Cookies_Toner_Friendly.docx`, `Pastry_Pup_Chewy_Chocolate_Chip_Cookies_Low_Toner.docx`, and `logo_alpha.png`). They belong to the owner. Do not modify, add, delete, or commit them unless explicitly requested.
 
 ## Suggested first prompt for the next AI
 
 > Read `AI_HANDOFF.md` and `README.md` completely before making changes. Preserve the current folder structure and static GitHub Pages architecture. Inspect the working tree without touching unrelated untracked files. Continue from the current deployment state, verify the latest GitHub Pages workflow, and test the public site before reporting completion.
-
